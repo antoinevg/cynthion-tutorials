@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel", "setuptools-git-versioning<2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tutorials"
+dynamic = ["version"]
+authors = [
+    {name = "Great Scott Gadgets", email = "dev@greatscottgadgets.com"},
+]
+license = { text = "BSD" }
+description = "Tutorials for the Great Scott Gadgets Cynthion"
+urls = { Source = "https://greatscottgadgets.com/cynthion" }
+readme = "README.md"
+dependencies = [
+    #"amaranth @ git+https://github.com/amaranth-lang/amaranth@main",
+    #"amaranth-soc @ git+https://github.com/amaranth-lang/amaranth-soc@main",
+    #"cynthion @ git+https://github.com/greatscottgadgets/cynthion@main#subdirectory=cynthion/python",
+    #"libusb1",
+    #"luna @ git+https://github.com/greatscottgadgets/luna@main",
+    #"usb_protocol",
+]
+
+[project.optional-dependencies]
+gateware = [
+]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-dir]
+tutorials = "src"
