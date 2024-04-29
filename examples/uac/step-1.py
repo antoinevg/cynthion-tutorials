@@ -383,13 +383,20 @@ class USBAudioClass2DeviceExample(Elaboratable):
 
         # - ep2_in - audio to host --------------------------------------------
 
-        # NCO
-        nco = NCO(60000000, bit_depth=24, lut_size=512)
+        # create our NCO
+        fs = int(60e6) # usb frequency
+        nco = NCO(60000000, bit_depth=24, lut_length=512)
         m.submodules.nco = DomainRenamer({"sync": "usb"})(nco)
-        m.d.usb += nco.i_freq_a.eq(220)
-        m.d.usb += nco.i_freq_b.eq(440)
-        left = nco.o_a
-        right = nco.o_b
+
+        # configure our NCO
+        phi0_delta = int(220. * nco.phi_tau / fs)
+        phi1_delta = int(440. * nco.phi_tau / fs)
+        m.d.usb += [
+            nco.phi0_delta.eq(phi0_delta),
+            nco.phi1_delta.eq(phi1_delta),
+        ]
+        left = nco.output0
+        right = nco.output1
 
         # frame counters
         next_channel = Signal()

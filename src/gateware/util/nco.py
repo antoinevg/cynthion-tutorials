@@ -1,7 +1,9 @@
-from amaranth import *
-from amaranth.sim import *
-
 import math
+
+from amaranth       import *
+from amaranth.sim   import *
+from amaranth.utils import log2_int
+
 
 # - lut generation ------------------------------------------------------------
 
@@ -45,95 +47,55 @@ def twos_comp(val, bits):
     return val
 
 
-
 # - gateware ------------------------------------------------------------------
 
 class NCO(Elaboratable):
-    def __init__(self, clock_frequency, lut_size, bit_depth, twos_complement=False, lut=None):
-        # accumulator
-        self.accumulator_width = math.ceil(math.log2(clock_frequency))
-        self.accumulator_a = Signal(self.accumulator_width)
-        self.accumulator_b = Signal(self.accumulator_width)
-
-        # input: frequency
-        freq_width = math.ceil(math.log2(clock_frequency / 2))
-        self.i_freq_a = Signal(freq_width, reset=220)
-        self.i_freq_b = Signal(freq_width, reset=440)
-
-        # output: samples
-        self.o_a = Signal(bit_depth)
-        self.o_b = Signal(bit_depth)
+    def __init__(self, clock_frequency, lut_length=512, bit_depth=24, twos_complement=False, lut=None):
+        self.bit_depth = bit_depth
 
         # lut
-        ys = sinusoid_lut(bit_depth, lut_size, twos_complement)
+        ys = sinusoid_lut(bit_depth, lut_length, twos_complement)
         # TODO use amaranth.lib.memory.Memory
         #self.lut = Memory(width=bit_depth, depth=lut_size, init=ys)
         self.lut = Array(ys)
-        self.lut_width = math.ceil(math.log2(lut_size))
+
+        # calculate accumulator parameters
+        self.index_bits = log2_int(lut_length)   # 512     = 9
+        self.phi_bits   = 32
+        self.phi_tau    = 1 << self.phi_bits
+
+        # input: frequency (in terms of phi_delta)
+        self.phi0_delta  = Signal(self.phi_bits)
+        self.phi1_delta  = Signal(self.phi_bits)
+
+        # output: sample
+        self.output0 = Signal(bit_depth)
+        self.output1 = Signal(bit_depth)
+
 
     def elaborate(self, platform):
         m = Module()
 
-        #m.submodules += self.lut
-
-        step_a = Signal.like(self.accumulator_a)
-        step_b = Signal.like(self.accumulator_b)
-
-        m.d.comb += [
-            step_a.eq(self.i_freq_a),
-            step_b.eq(self.i_freq_b),
-            self.o_a.eq(self.lut[self.accumulator_a[-self.lut_width:]]),
-            self.o_b.eq(self.lut[self.accumulator_b[-self.lut_width:]]),
+        # accumulator
+        phi0 = Signal(self.phi_bits)
+        phi1 = Signal(self.phi_bits)
+        m.d.sync += [
+            phi0.eq(phi0 + self.phi0_delta),
+            phi1.eq(phi1 + self.phi1_delta),
         ]
 
-        m.d.sync += [
-            self.accumulator_a.eq(self.accumulator_a + step_a),
-            self.accumulator_b.eq(self.accumulator_b + step_b),
+        # calculate index
+        index0 = Signal(self.index_bits)
+        index1 = Signal(self.index_bits)
+        m.d.comb += [
+            index0.eq(phi0[-self.index_bits:]),
+            index1.eq(phi1[-self.index_bits:]),
+        ]
+
+        # output sample
+        m.d.comb += [
+            self.output0.eq(self.lut[index0]),
+            self.output1.eq(self.lut[index1]),
         ]
 
         return m
-
-    def ports(self):
-        return [
-            self.i_freq_a,
-            self.i_freq_b,
-            self.accumulator_a,
-            self.accumulator_b,
-            self.o_a,
-            self.o_b,
-        ]
-
-
-def main():
-    clock_frequency = int(48e3)
-    lut_size = 1024
-    bit_depth = 24
-
-    dut = NCO(clock_frequency, bit_depth=bit_depth, lut_size=lut_size)
-
-    sim = Simulator(dut)
-    def proc():
-        cycles = clock_frequency // 16
-
-        yield dut.i_freq_a.eq(220)
-        yield dut.i_freq_b.eq(440)
-        for _ in range(cycles):
-            yield Tick()
-        yield dut.i_freq_a.eq(247)
-        yield dut.i_freq_b.eq(493)
-        for _ in range(cycles):
-            yield Tick()
-        yield dut.i_freq_a.eq(262)
-        yield dut.i_freq_b.eq(524)
-        for _ in range(cycles):
-            yield Tick()
-
-    sim.add_clock(1 / clock_frequency)
-    sim.add_process(proc)
-
-    with sim.write_vcd("nco.vcd", "nco.gtkw", traces=dut.ports()):
-        sim.run()
-
-
-if __name__ == "__main__":
-    main()

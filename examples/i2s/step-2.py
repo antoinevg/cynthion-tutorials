@@ -45,7 +45,7 @@ class Top(Elaboratable):
         wiring.connect(m, blinky.output, leds.input)
 
         # generate i2s sclk, lrck
-        clkdiv = Signal(12)
+        clkdiv = Signal(9)
         m.d.i2s += clkdiv.eq(clkdiv + 1)
         sclk = Signal()
         lrck = Signal()
@@ -63,24 +63,30 @@ class Top(Elaboratable):
             i2s_tx.i2s.lrck.eq(lrck),
             i2s_tx.i2s.sclk.eq(sclk),
 
-            # codec d/a
+            # codec dac
             i2s.da_mclk.o.eq(ClockSignal("i2s")),
             i2s.da_lrck.o.eq(lrck),
             i2s.da_sclk.o.eq(sclk),
             i2s.da_sdi.o.eq(i2s_tx.i2s.sdo),
         ]
 
-        # wire nco output up to I2sTransmitter
+        # create our NCO
         fs = int(120e6) # sync frequency
-        m.submodules.nco = nco = NCO(fs, bit_depth=24, lut_size=4096, twos_complement=False)
+        m.submodules.nco = nco = NCO(fs, lut_length=512, bit_depth=24,  twos_complement=False)
+
+        # configure our NCO
+        phi0_delta = int(220. * nco.phi_tau / fs)
+        phi1_delta = int(440. * nco.phi_tau / fs)
         m.d.comb += [
-            nco.i_freq_a  .eq(220),   # left
-            nco.i_freq_b  .eq(440),   # right
+            nco.phi0_delta.eq(Const(phi0_delta)),
+            nco.phi1_delta.eq(Const(phi1_delta)),
         ]
+
+        # wire nco output up to I2sTransmitter
         with m.If(i2s_tx.next):
             m.d.i2s += [
-                i2s_tx.left   .eq(nco.o_a[::-1]),
-                i2s_tx.right  .eq(nco.o_b[::-1]),
+                i2s_tx.left    .eq(nco.output0[::-1]),
+                i2s_tx.right   .eq(nco.output1[::-1]),
             ]
 
         toggle = Signal()
