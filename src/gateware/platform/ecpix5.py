@@ -10,7 +10,7 @@ from amaranth_boards.ecpix5 import ECPIX585Platform as _ECPIX585Platform
 
 from luna.gateware.platform import LUNAPlatform
 
-from .ecpix5_luna import ECPIX5DomainGenerator
+from ..architecture.ecpix5_luna import LunaDomainGenerator
 
 
 # - platform ------------------------------------------------------------------
@@ -23,7 +23,7 @@ from .ecpix5_luna import ECPIX5DomainGenerator
 class ECPIX585Rev03Platform(_ECPIX585Platform, LUNAPlatform):
     name                   = "ECPIX-5 (85F)"
 
-    clock_domain_generator = ECPIX5DomainGenerator
+    clock_domain_generator = LunaDomainGenerator
 
     #default_usb3_phy       = ECPIX5SuperSpeedPHY
     default_usb_connection = "ulpi"
