@@ -4,7 +4,7 @@ cynthion:
 
 ecpix5:
 	@rm -rf build/
-	LUNA_PLATFORM="tutorials.gateware.platform.ecpix5:ECPIX585Rev03Platform" python ./step-1.py --keep-files
+	LUNA_PLATFORM="tutorials.gateware.platform.ecpix5:ECPIX585Rev03Platform" python ./step-1.py --keep-files --dry-run
 
 load:
 	#apollo configure build/top.bit

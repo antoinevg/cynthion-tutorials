@@ -64,6 +64,7 @@ class Mac(Elaboratable):
                 m.d.eth_rx += self.rx_valid.eq(1)
                 m.next = "IDLE"
 
+        # TODO write tx_buffer to tx_rgmii
 
         return m
 
@@ -107,9 +108,15 @@ class Top(Elaboratable):
         m.domains.eth_rx = ClockDomain("eth_rx")
         m.d.comb += ClockSignal("eth_rx").eq(rgmii.rx_clk.i)
 
+        # ecpix5: add eth_tx domain from m.d.sync: 125 MHz (internal)
+        m.domains.eth_tx = ClockDomain("eth_tx")
+        m.d.comb += ClockSignal("eth_tx").eq(ClockSignal("sync"))
+
+        # cynthion: add eth_tx domain from ??? TODO
+
         # create MAC
-        rx_delay=2e-9 # Numato RTL8211E
-        #rx_delay=0   # ecpix5 KSZ9031RNXCC-TR
+        #rx_delay=2e-9 # Numato RTL8211E
+        rx_delay=0   # ecpix5 KSZ9031RNXCC-TR
         rx_rgmii = RxRgmii(rgmii.rx_ctrl.i, rgmii.rx_data.i, rx_delay=rx_delay)
         mac      = Mac(rx_rgmii)
         m.submodules += [rx_rgmii, mac]
@@ -119,7 +126,7 @@ class Top(Elaboratable):
 
         # wire up ethernet MAC & StreamDevice
         stream = StreamInterface(payload_width=8)
-        m.d.comb += usb_bridge.stream_ep.stream.stream_eq(stream)
+        m.d.comb += usb_bridge.stream_in.stream.stream_eq(stream)
 
         # stream packets over usb
         delim      = Signal(8)
@@ -213,18 +220,38 @@ class Top(Elaboratable):
                 with m.If(stream.ready):
                     m.d.usb += delim.eq(delim + 1)
                 with m.If(delim >= 7):
+                    # flush stream_in ?
+                    m.d.comb += usb_bridge.stream_in.flush.eq(1)
                     m.next = "IDLE"
 
+        # debug ecpix5 clocks
+        # ss_div2 = Signal()      # 125 MHz
+        # sync_div2 = Signal()    # 125 MHz
+        # usb_div2 = Signal()     #  60 MHz
+        # usb_io_div2 = Signal()  #  48 MHz
+        # fast_div2 = Signal()    # 250 MHz
+        # m.d.ss     += ss_div2    .eq(~ss_div2)
+        # m.d.sync   += sync_div2  .eq(~sync_div2),
+        # m.d.usb    += usb_div2   .eq(~usb_div2),
+        # m.d.usb_io += usb_io_div2.eq(~usb_io_div2),
+        # m.d.fast   += fast_div2  .eq(~fast_div2),
+        # m.d.comb += [
+        #     debug0[0].eq(ss_div2),
+        #     debug0[1].eq(sync_div2),
+        #     debug0[2].eq(usb_div2),
+        #     debug0[3].eq(usb_io_div2),
+        #     debug0[4].eq(fast_div2),
+        # ]
 
         # debug signals
         m.d.comb += [
-            #debug0[0].eq(rgmii.rx_clk),
-            #debug0[1].eq(rx_rgmii.rx_control_out[0]),
-            #debug0[2].eq(rx_rgmii.rx_data_out[0]),
-            #debug0[3].eq(mac.rx_valid),
+            debug0[0].eq(rx_rgmii.rx_control_out[0]),
+            debug0[1].eq(rx_rgmii.rx_data_out[0]),
+            debug0[2].eq(mac.rx_valid),
+            debug0[3].eq(stream.ready),
+            debug0[4].eq(usb_bridge.stream_in.flush),
 
-            #debug0[3].eq(stream.ready),
-            #debug0[4:8].eq(fsm_state),
+            debug1[0:4].eq(fsm_state),
         ]
 
         # obblinky

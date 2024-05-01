@@ -18,14 +18,15 @@ PRODUCT_ID = cynthion.shared.usb.bProductId.cynthion
 
 BULK_ENDPOINT_NUMBER  = 1
 BULK_ENDPOINT_ADDRESS = 0x80 | BULK_ENDPOINT_NUMBER
-MAX_BULK_PACKET_SIZE  = 4096
+MAX_BULK_PACKET_SIZE  = 2048
 
 
 # - PacketParser --------------------------------------------------------------
 
 def parse_packet(packet):
-    header   = int.from_bytes(packet[0:2], byteorder="little")
+    header   = int.from_bytes(packet[0:2], byteorder="little") # packet size
     preamble = packet[2:9] # 0x55 0x55 0x55 0x55 0x55 0x55 0xD5
+    print(f"{list(map(hex, packet[2:9]))}")
     packet = packet[9:]
     prefix = f"{header - 7} bytes\t"
 
@@ -125,11 +126,12 @@ def transfer_completed(transfer):
 
     # handle transfer
     if length > 0:
-        logging.info(f"bulk read transfer received {length} bytes")
+        #logging.info(f"bulk read transfer received {length} bytes")
 
         # append to packet buffer
         response = transfer.getBuffer()
-        packet_buffer.append(response)
+        #logging.info(list(response[:length]))
+        packet_buffer.append(response[:length])
 
         # get next packet
         while True:
@@ -140,7 +142,6 @@ def transfer_completed(transfer):
             # display packet
             if len(packet) >= 64:
                 parse_packet(packet)
-                pass
             else:
                 logging.error(f"short packet: {len(packet)} -> {list(packet)}")
 
@@ -169,7 +170,34 @@ def main(context, device_handle):
         context.handleEvents()
 
 
+def icmp():
+    from scapy.all import ICMP, hexdump, raw
+
+    p = Ether()/IP(dst="192.168.20.36") / ICMP()
+
+    print(f"p: {p}")
+    print(f"hexdump: {hexdump(p)}")
+    print(f"raw: {list(raw(p))}")
+
+    # | MAC DST         | MAC SRC         |
+    #  FF FF FF FF FF FF 58 47 CA 75 AC A5 08 00 45 00
+    #          | ICMP               | IP SRC    | IP
+    #  00 1C 00 01 00 00 40 01 D1 46 C0 A8 14 25 C0 A8
+    #  DST  | ???
+    #  14 24 08 00 F7 FF 00 00 00 00
+
+    #  255, 255, 255, 255, 255, 255, 88, 71, 202, 117, 172, 165,  8,  0,  69,   0,
+    #  0,    28,   0,   1,   0,   0, 64,  1, 209,  70, 192, 168, 20, 37, 192, 168,
+    #  20,   36,   8,   0, 247, 255,  0,  0,   0,   0
+
+    sys.exit(0)
+
+    return raw(p)
+
 if __name__ == "__main__":
+
+    #icmp()
+
     USB_CONTEXT   = None
     DEVICE_HANDLE = None
 
