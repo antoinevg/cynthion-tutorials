@@ -1,39 +1,32 @@
-import time
-import errno
+from amaranth               import Signal, Elaboratable, Module
+from amaranth.build.res     import ResourceError
+from usb_protocol.emitters  import DeviceDescriptorCollection
 
-
-import usb
-from datetime import datetime
-from enum import IntEnum, IntFlag
-
-from amaranth                          import Signal, Elaboratable, Module
-from amaranth.build.res                import ResourceError
-from usb_protocol.emitters             import DeviceDescriptorCollection
-from usb_protocol.types                import USBRequestType
-
-from luna.usb2                         import USBDevice, USBStreamInEndpoint
-from luna                              import top_level_cli
-
-from luna.gateware.usb.request.control import ControlRequestHandler
-from luna.gateware.usb.stream          import USBInStreamInterface
-from luna.gateware.stream.generator    import StreamSerializer
-from luna.gateware.utils.cdc           import synchronize
-from luna.gateware.interface.ulpi      import UTMITranslator
+from luna.usb2              import USBDevice
+from luna.usb2              import USBStreamInEndpoint, USBStreamOutEndpoint
 
 import cynthion
+
+
 USB_VENDOR_ID  = cynthion.shared.usb.bVendorId.cynthion
 USB_PRODUCT_ID = cynthion.shared.usb.bProductId.cynthion
 
-BULK_ENDPOINT_NUMBER  = 1
-BULK_ENDPOINT_ADDRESS = 0x80 | BULK_ENDPOINT_NUMBER
+BULK_OUT_ENDPOINT_NUMBER  = 1
+BULK_OUT_ENDPOINT_ADDRESS = BULK_OUT_ENDPOINT_NUMBER
+BULK_IN_ENDPOINT_NUMBER   = 1
+BULK_IN_ENDPOINT_ADDRESS  = 0x80 | BULK_IN_ENDPOINT_NUMBER
 MAX_BULK_PACKET_SIZE  = 512
 
 
 class StreamBridge(Elaboratable):
 
     def __init__(self):
-        self.stream_ep = USBStreamInEndpoint(
-            endpoint_number=BULK_ENDPOINT_NUMBER,
+        self.stream_in = USBStreamInEndpoint(
+            endpoint_number=BULK_IN_ENDPOINT_NUMBER,
+            max_packet_size=MAX_BULK_PACKET_SIZE
+        )
+        self.stream_out = USBStreamOutEndpoint(
+            endpoint_number=BULK_OUT_ENDPOINT_NUMBER,
             max_packet_size=MAX_BULK_PACKET_SIZE
         )
 
@@ -61,7 +54,7 @@ class StreamBridge(Elaboratable):
                 i.bInterfaceNumber = 0
 
                 with i.EndpointDescriptor() as e:
-                    e.bEndpointAddress = BULK_ENDPOINT_ADDRESS
+                    e.bEndpointAddress = BULK_IN_ENDPOINT_ADDRESS
                     e.wMaxPacketSize   = MAX_BULK_PACKET_SIZE
 
         return descriptors
@@ -82,8 +75,9 @@ class StreamBridge(Elaboratable):
         descriptors = self.create_descriptors()
         control_endpoint = usb.add_standard_control_endpoint(descriptors)
 
-        # Add a stream endpoint to our device.
-        usb.add_endpoint(self.stream_ep)
+        # Add stream endpoints to our device.
+        usb.add_endpoint(self.stream_in)
+        usb.add_endpoint(self.stream_out)
 
         m.d.comb += [
             # Connect device
