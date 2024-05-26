@@ -11,7 +11,7 @@ class I2SDomainGenerator(Elaboratable):
         m = Module()
 
         # Create our clock domains.
-        m.domains.i2s = self.i2s = ClockDomain()
+        m.domains.i2s_mclk = self.i2s_mclk = ClockDomain()
 
         # Grab our input clock
         clkin = ClockSignal("fast") # 240 MHz
@@ -77,7 +77,7 @@ class I2SDomainGenerator(Elaboratable):
 
         # Connect clocks.
         m.d.comb += [
-            ClockSignal(domain="i2s").eq(self.clkout0),
+            ClockSignal(domain="i2s_mclk").eq(self.clkout0),
         ]
 
         return m

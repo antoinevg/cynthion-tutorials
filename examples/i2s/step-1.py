@@ -45,7 +45,7 @@ class Top(Elaboratable):
 
         # generate i2s sclk, lrck
         clkdiv = Signal(12)
-        m.d.i2s += clkdiv.eq(clkdiv + 1)
+        m.d.i2s_mclk += clkdiv.eq(clkdiv + 1)
         sclk = Signal()
         lrck = Signal()
         m.d.comb += [
@@ -56,13 +56,13 @@ class Top(Elaboratable):
         # i2s pass-through
         m.d.comb += [
             # d/a
-            i2s.da_mclk.o.eq(ClockSignal("i2s")),
+            i2s.da_mclk.o.eq(ClockSignal("i2s_mclk")),
             i2s.da_lrck.o.eq(lrck),
             i2s.da_sclk.o.eq(sclk),
             i2s.da_sdi.o.eq(i2s.ad_sdo.i),
 
             # a/d
-            i2s.ad_mclk.o.eq(ClockSignal("i2s")),
+            i2s.ad_mclk.o.eq(ClockSignal("i2s_mclk")),
             i2s.ad_lrck.o.eq(lrck),
             i2s.ad_sclk.o.eq(sclk),
         ]

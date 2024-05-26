@@ -17,7 +17,7 @@ dependencies = [
     #"amaranth-soc @ git+https://github.com/amaranth-lang/amaranth-soc@main",
     #"cynthion @ git+https://github.com/greatscottgadgets/cynthion@main#subdirectory=cynthion/python",
     #"libusb1",
-    #"luna @ git+https://github.com/greatscottgadgets/luna@main",
+    #"luna-usb @ git+https://github.com/greatscottgadgets/luna@main",
     #"usb_protocol",
 ]
 
