@@ -2,10 +2,6 @@ from amaranth        import *
 from amaranth.utils  import bits_for
 from amaranth.build  import Platform
 
-from luna                            import top_level_cli
-from luna.gateware.platform          import NullPin
-from luna.gateware.architecture.car  import LunaECP5DomainGenerator
-
 
 # - module: ClockDivider ------------------------------------------------------
 
