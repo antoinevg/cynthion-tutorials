@@ -16,14 +16,14 @@ use pac;
 #[no_mangle]
 fn MachineExternal() {
     let leds   = unsafe { pac::LEDS::steal() };
-    let timer0_ev = unsafe { pac::TIMER0_EV::steal() };
-    let timer1_ev = unsafe { pac::TIMER1_EV::steal() };
+    let timer0 = unsafe { pac::TIMER0::steal() };
+    let timer1 = unsafe { pac::TIMER1::steal() };
 
     if pac::csr::interrupt::is_pending(pac::Interrupt::TIMER0) {
-        timer0_ev.pending().modify(|r, w| unsafe { w.mask().bits(r.mask().bits()) });
+        timer0.ev_pending().modify(|r, w| unsafe { w.mask().bits(r.mask().bits()) });
         leds.output().write(|w| unsafe { w.bits(0b11_1000) });
     } else if pac::csr::interrupt::is_pending(pac::Interrupt::TIMER1) {
-        timer1_ev.pending().modify(|r, w| unsafe { w.mask().bits(r.mask().bits()) });
+        timer1.ev_pending().modify(|r, w| unsafe { w.mask().bits(r.mask().bits()) });
         leds.output().write(|w| unsafe { w.bits(0b00_0111) });
     } else {
         error!("MachineExternal - unknown interrupt");
@@ -39,9 +39,7 @@ fn main() -> ! {
     let peripherals = pac::Peripherals::take().unwrap();
     let leds      = &peripherals.LEDS;
     let timer0    = &peripherals.TIMER0;
-    let timer0_ev = &peripherals.TIMER0_EV;
     let timer1    = &peripherals.TIMER1;
-    let timer1_ev = &peripherals.TIMER1_EV;
 
     // initialize logging
     hello_soc::log::init(hello_soc::Serial1::new(peripherals.UART1));
@@ -62,8 +60,8 @@ fn main() -> ! {
     timer1.enable().write(|w| w.enable().bit(true));
 
     // enable timer events
-    timer0_ev.enable().write(|w| unsafe { w.mask().bits(0b11) }); // event: sub_0
-    timer1_ev.enable().write(|w| unsafe { w.mask().bits(0b11) }); // event: sub_0 TODO sub_1
+    timer0.ev_enable().write(|w| unsafe { w.mask().bits(0b11) }); // event: sub_0
+    timer1.ev_enable().write(|w| unsafe { w.mask().bits(0b11) }); // event: sub_0 TODO sub_1
 
     // enable interrupts
     unsafe {

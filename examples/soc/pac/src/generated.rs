@@ -209,52 +209,6 @@ impl core::fmt::Debug for TIMER0 {
 }
 #[doc = "timer0"]
 pub mod timer0;
-#[doc = "timer0_ev"]
-pub struct TIMER0_EV {
-    _marker: PhantomData<*const ()>,
-}
-unsafe impl Send for TIMER0_EV {}
-impl TIMER0_EV {
-    #[doc = r"Pointer to the register block"]
-    pub const PTR: *const timer0_ev::RegisterBlock = 0xf000_0310 as *const _;
-    #[doc = r"Return the pointer to the register block"]
-    #[inline(always)]
-    pub const fn ptr() -> *const timer0_ev::RegisterBlock {
-        Self::PTR
-    }
-    #[doc = r" Steal an instance of this peripheral"]
-    #[doc = r""]
-    #[doc = r" # Safety"]
-    #[doc = r""]
-    #[doc = r" Ensure that the new instance of the peripheral cannot be used in a way"]
-    #[doc = r" that may race with any existing instances, for example by only"]
-    #[doc = r" accessing read-only or write-only registers, or by consuming the"]
-    #[doc = r" original peripheral and using critical sections to coordinate"]
-    #[doc = r" access between multiple new instances."]
-    #[doc = r""]
-    #[doc = r" Additionally, other software such as HALs may rely on only one"]
-    #[doc = r" peripheral instance existing to ensure memory safety; ensure"]
-    #[doc = r" no stolen instances are passed to such software."]
-    pub unsafe fn steal() -> Self {
-        Self {
-            _marker: PhantomData,
-        }
-    }
-}
-impl Deref for TIMER0_EV {
-    type Target = timer0_ev::RegisterBlock;
-    #[inline(always)]
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*Self::PTR }
-    }
-}
-impl core::fmt::Debug for TIMER0_EV {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        f.debug_struct("TIMER0_EV").finish()
-    }
-}
-#[doc = "timer0_ev"]
-pub mod timer0_ev;
 #[doc = "timer1"]
 pub struct TIMER1 {
     _marker: PhantomData<*const ()>,
@@ -301,52 +255,6 @@ impl core::fmt::Debug for TIMER1 {
 }
 #[doc = "timer1"]
 pub mod timer1;
-#[doc = "timer1_ev"]
-pub struct TIMER1_EV {
-    _marker: PhantomData<*const ()>,
-}
-unsafe impl Send for TIMER1_EV {}
-impl TIMER1_EV {
-    #[doc = r"Pointer to the register block"]
-    pub const PTR: *const timer1_ev::RegisterBlock = 0xf000_0410 as *const _;
-    #[doc = r"Return the pointer to the register block"]
-    #[inline(always)]
-    pub const fn ptr() -> *const timer1_ev::RegisterBlock {
-        Self::PTR
-    }
-    #[doc = r" Steal an instance of this peripheral"]
-    #[doc = r""]
-    #[doc = r" # Safety"]
-    #[doc = r""]
-    #[doc = r" Ensure that the new instance of the peripheral cannot be used in a way"]
-    #[doc = r" that may race with any existing instances, for example by only"]
-    #[doc = r" accessing read-only or write-only registers, or by consuming the"]
-    #[doc = r" original peripheral and using critical sections to coordinate"]
-    #[doc = r" access between multiple new instances."]
-    #[doc = r""]
-    #[doc = r" Additionally, other software such as HALs may rely on only one"]
-    #[doc = r" peripheral instance existing to ensure memory safety; ensure"]
-    #[doc = r" no stolen instances are passed to such software."]
-    pub unsafe fn steal() -> Self {
-        Self {
-            _marker: PhantomData,
-        }
-    }
-}
-impl Deref for TIMER1_EV {
-    type Target = timer1_ev::RegisterBlock;
-    #[inline(always)]
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*Self::PTR }
-    }
-}
-impl core::fmt::Debug for TIMER1_EV {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        f.debug_struct("TIMER1_EV").finish()
-    }
-}
-#[doc = "timer1_ev"]
-pub mod timer1_ev;
 #[no_mangle]
 static mut DEVICE_PERIPHERALS: bool = false;
 #[doc = r" All the peripherals."]
@@ -360,12 +268,8 @@ pub struct Peripherals {
     pub UART1: UART1,
     #[doc = "timer0"]
     pub TIMER0: TIMER0,
-    #[doc = "timer0_ev"]
-    pub TIMER0_EV: TIMER0_EV,
     #[doc = "timer1"]
     pub TIMER1: TIMER1,
-    #[doc = "timer1_ev"]
-    pub TIMER1_EV: TIMER1_EV,
 }
 impl Peripherals {
     #[doc = r" Returns all the peripherals *once*."]
@@ -400,13 +304,7 @@ impl Peripherals {
             TIMER0: TIMER0 {
                 _marker: PhantomData,
             },
-            TIMER0_EV: TIMER0_EV {
-                _marker: PhantomData,
-            },
             TIMER1: TIMER1 {
-                _marker: PhantomData,
-            },
-            TIMER1_EV: TIMER1_EV {
                 _marker: PhantomData,
             },
         }

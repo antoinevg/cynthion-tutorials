@@ -90,13 +90,14 @@ class GenerateSVD:
             end   = resource_infos[-1].end
 
             name = "_".join([str(s) for s in name]) if isinstance(name, tuple) else name[0]
-            print(f"\t{name} 0x{start:04x}")
+            print(f"  {name} 0x{start:04x}")
             peripheral = self._peripheral(peripherals, name, start + csr_base, end + csr_base)
 
             # <registers />
             registers = SubElement(peripheral, "registers")
             for resource_info in resource_infos:
-                name = "_".join([str(s) for s in resource_info.path[-1]])
+                name = "_".join([str(s[0]) for s in resource_info.path[1:]])
+                print(f"    {resource_info.path[1:]}  =>  {name}")
                 # TODO WTAF Grrrrrlllll?! Why would you override my subclass docs with a generic one?
                 #      amaranth_soc/csr/reg.py:471
                 # description =  {resource.__class__.__doc__}")

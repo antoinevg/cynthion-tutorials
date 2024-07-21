@@ -47,23 +47,26 @@ class Peripheral(wiring.Component):
         event_map.add(self._sub_1)
         self._events = csr.event.EventMonitor(event_map, data_width=8)
 
+        # csr decoder
+        self._decoder = csr.Decoder(addr_width=5, data_width=8)
+        self._decoder.add(self._bridge.bus)
+        self._decoder.add(self._events.bus, name="ev")
+
         super().__init__({
             #"bus":    In(csr.Signature(addr_width=regs.addr_width, data_width=regs.data_width)),
-            "bus":    Out(self._bridge.bus.signature),
-            "events": Out(self._events.bus.signature),
+            "bus":    Out(self._decoder.bus.signature),
             "irq":    Out(unsigned(1)),
         })
-        self.bus.memory_map = self._bridge.bus.memory_map
-        self.events.memory_map = self._events.bus.memory_map
+        self.bus.memory_map = self._decoder.bus.memory_map
 
     def elaborate(self, platform):
         m = Module()
-        m.submodules.bridge = self._bridge
-        m.submodules.events = self._events
+        m.submodules.bridge  = self._bridge
+        m.submodules.events  = self._events
+        m.submodules.decoder = self._decoder
 
-        # connect busses
-        connect(m, flipped(self.bus), self._bridge.bus)
-        connect(m, self.events, flipped(self._events.bus))
+        # connect bus
+        connect(m, flipped(self.bus), self._decoder.bus)
 
         # peripheral logic
         zero = Signal()

@@ -132,18 +132,12 @@ class Soc(Component):
 
         # timer0
         self.timer0 = timer.Peripheral(width=32)
-        # FIXME figure out the best strategy for combining these into a single csr interface
-        #
-        # The way lambdasoc did it was simply to have peripherals instead expose a wb interface
-        # and then just append each of the peripheral's csr interfaces to it.
-        self.csr_decoder.add(self.timer0.bus,    addr=self.timer0_base,      name="timer0")
-        self.csr_decoder.add(self.timer0.events, addr=self.timer0_base + 16, name="timer0_ev")
-        self.interrupt_controller.add(self.timer0, name="timer0", number=self.timer0_irq)
+        self.csr_decoder.add(self.timer0.bus, addr=self.timer0_base, name="timer0")
+        self.interrupt_controller.add(self.timer0, number=self.timer0_irq, name="timer0")
 
         # timer1
         self.timer1 = timer.Peripheral(width=32)
-        self.csr_decoder.add(self.timer1.bus,    addr=self.timer1_base,      name="timer1")
-        self.csr_decoder.add(self.timer1.events, addr=self.timer1_base + 16, name="timer1_ev")
+        self.csr_decoder.add(self.timer1.bus, addr=self.timer1_base, name="timer1")
         self.interrupt_controller.add(self.timer1, name="timer1", number=self.timer1_irq)
 
         # wishbone csr bridge
