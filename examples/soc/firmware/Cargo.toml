@@ -1,0 +1,15 @@
+[package]
+name = "hello-soc"
+version = "0.1.0"
+authors = ["Great Scott Gadgets <dev@greatscottgadgets.com>"]
+license-file = "LICENSE.txt"
+edition = "2021"
+
+[dependencies]
+riscv = { version = "=0.10.1", features = ["critical-section-single-hart"] }
+riscv-rt = { version = "=0.11.0" }
+panic-halt = "0.2.0"
+pac = { path="../pac", default-features = false, features = ["critical-section", "vexriscv"] }
+hal = { path="../hal", default-features = false, features = ["vexriscv"] }
+
+log = { version="=0.4.17", features = ["release_max_level_debug"] }

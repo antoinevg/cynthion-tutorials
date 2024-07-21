@@ -1,0 +1,96 @@
+[package]
+name = "hal"
+version = "0.0.0"
+authors = ["Great Scott Gadgets <dev@greatscottgadgets.com>"]
+license = "BSD-3-Clause"
+description = "Hardware Abstraction Layer implementation for LunaSoC cores"
+categories = ["embedded", "hardware-support", "no-std"]
+keywords = ["cynthion", "riscv", "luna-soc", "hal", "embedded-hal"]
+repository = "https://github.com/greatscottgadgets/cynthion"
+documentation = "https://docs.rs/lunasoc-hal"
+edition = "2021"
+rust-version = "1.68"
+
+include = ["examples/**/*", "src/**/*", "README.md", "memory.x"]
+
+[package.metadata.docs.rs]
+default-target = "riscv32imac-unknown-none-elf"
+targets = [
+    "riscv32i-unknown-none-elf",
+    "riscv32imac-unknown-none-elf",
+]
+
+[lib]
+test = false
+bench = false
+
+# - features ------------------------------------------------------------------
+
+[features]
+default = [
+    "vexriscv",
+]
+
+# select softcore
+minerva = [
+    "pac/minerva",
+]
+vexriscv = [
+    "pac/vexriscv",
+]
+
+# use nightly features
+nightly = []
+
+# build smolusb hal driver
+#usb = [
+#    "log",
+#    "smolusb",
+#]
+
+
+# - dependencies --------------------------------------------------------------
+
+[dependencies]
+embedded-hal = "=1.0.0-alpha.9"
+embedded-hal-0 = { package = "embedded-hal", version = "=0.2.7", features = ["unproven"] }
+embedded-hal-nb = "=1.0.0-alpha.1"
+log = { version = "=0.4.17", optional = true }
+nb = "=1.1.0"
+riscv = { version = "=0.10.1" }
+#smolusb = { version = "0.0", path = "../smolusb", optional = true }
+
+# - dev-dependencies ----------------------------------------------------------
+
+[dev-dependencies]
+pac = { path = "../pac", default-features = false, features = ["critical-section", "rt"]}
+panic-halt = "=0.2.0"
+riscv = { version = "=0.10.1", features = ["critical-section-single-hart"] }
+riscv-rt = { version = "=0.11.0" }
+
+
+# - examples ------------------------------------------------------------------
+
+# [[example]]
+# name = "blinky"
+# required-features = ["pac/rt"]
+
+# [[example]]
+# name = "blinky_pac"
+# required-features = ["pac/rt"]
+
+# [[example]]
+# name = "interrupts"
+# required-features = ["pac/rt"]
+
+# [[example]]
+# name = "interrupts_pac"
+# required-features = ["pac/rt"]
+
+# [[example]]
+# name = "uart"
+# required-features = ["pac/rt"]
+
+# [[example]]
+# name = "uart_pac"
+# required-features = ["pac/rt"]

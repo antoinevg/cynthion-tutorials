@@ -68,3 +68,31 @@ RGMII_RESOURCES = [
         Attrs(IO_TYPE="LVCMOS33")
     ),
 ]
+
+
+# - soc -----------------------------------------------------------------------
+
+SOC_RESOURCES = [
+    # PMOD B: UART
+    Resource("uart", 1,
+        Subsignal("rx",  Pins("1", conn=("pmod", 1), dir="i")),
+        Subsignal("tx",  Pins("2", conn=("pmod", 1), dir="o")),
+        Attrs(IO_TYPE="LVCMOS33")
+    ),
+
+    # PMOD B: DEBUG
+    Resource("debug", 0,
+        Subsignal("a",  Pins("3", conn=("pmod", 1), dir="o")),
+        Subsignal("b",  Pins("4", conn=("pmod", 1), dir="o")),
+        Attrs(IO_TYPE="LVCMOS33")
+    ),
+
+    # PMOD B: JTAG
+    Resource("jtag", 0,
+        Subsignal("tms",  Pins("7",  conn=("pmod", 1), dir="i")),
+        Subsignal("tdi",  Pins("8",  conn=("pmod", 1), dir="i")),
+        Subsignal("tdo",  Pins("9",  conn=("pmod", 1), dir="o")),
+        Subsignal("tck",  Pins("10", conn=("pmod", 1), dir="i")),
+        Attrs(IO_TYPE="LVCMOS33")
+    ),
+]

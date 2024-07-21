@@ -7,3 +7,10 @@ __pycache__/
 
 # build
 build/
+**/scala/project/target/
+**/scala/target/
+
+# Rust
+**/target/
+Cargo.lock
+**/*.rs.bk
