@@ -6,6 +6,7 @@ from amaranth_soc          import csr, event
 
 
 class Peripheral(wiring.Component):
+    # FIXME group registers
     class Reload(csr.Register, access="rw"):
         """Reload value of counter. When counter reaches 0 is is automatically reloaded with this value."""
         def __init__(self, width):

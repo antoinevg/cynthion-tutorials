@@ -86,29 +86,34 @@ class GenerateSVD:
         print(f"\ncsr_base: 0x{csr_base:08x}")
         for name, resource_infos in self.csr_peripherals.items():
             # so, in theory, these are always sorted so:
-            start = resource_infos[0].start
-            end   = resource_infos[-1].end
+            pstart = resource_infos[0].start
+            pend   = resource_infos[-1].end
 
             name = "_".join([str(s) for s in name]) if isinstance(name, tuple) else name[0]
-            print(f"  {name} 0x{start:04x}")
-            peripheral = self._peripheral(peripherals, name, start + csr_base, end + csr_base)
+            print(f"  {name} 0x{pstart:04x} => 0x{pend:04x}  width: {pend - pstart} bytes")
+            peripheral = self._peripheral(peripherals, name, pstart + csr_base, pend + csr_base)
 
             # <registers />
             registers = SubElement(peripheral, "registers")
             for resource_info in resource_infos:
                 name = "_".join([str(s[0]) for s in resource_info.path[1:]])
-                print(f"    {resource_info.path[1:]}  =>  {name}")
+                rstart = resource_info.start - pstart
+                rend   = resource_info.end   - pstart
+                #print(f"    {resource_info.path[1:]}  =>  {name}")
                 # TODO WTAF Grrrrrlllll?! Why would you override my subclass docs with a generic one?
                 #      amaranth_soc/csr/reg.py:471
                 # description =  {resource.__class__.__doc__}")
                 description = "TODO amaranth_soc/csr/reg.py:471"
 
+                print(f"    {name}\t0x{rstart:02x} => 0x{rend:02x}  width: {rend - rstart} bytes")
+
                 register = self._register(
-                    registers,
-                    name,
-                    resource_info.start - start,
-                    resource_info.end - start,
-                    description=description
+                    registers,                     # root
+                    name,                          # name
+                    rstart,                        # register start
+                    rend,                          # register end
+                    description=description        # description
+                                                   # TODO access
                 )
 
                 #print(type(resource_info.resource.field)) # FieldActionMap
@@ -127,9 +132,20 @@ class GenerateSVD:
                              "read-write"
                     description = "TODO amaranth_soc/csr/reg.py:471"
 
-                    field = self._field(fields, name, offset, width, access, description)
+                    bitRange = "[{:d}:{:d}]".format(offset + width - 1, offset)
 
-                    offset += 1
+                    print(f"      {name}\toffset:0x{offset} width: {width} bits range: {bitRange}")
+
+                    field = self._field(
+                        fields,      # root
+                        name,        # name
+                        offset,      # field bitOffset
+                        width,       # field bitWidth
+                        access,      # access
+                        description  # description
+                    )
+
+                    offset += width
 
         print("\nwishbone peripherals:")
         for name, t in self.wb_peripherals.items():
