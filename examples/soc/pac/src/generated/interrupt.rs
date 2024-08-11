@@ -6,6 +6,16 @@ pub enum Interrupt {
     TIMER0 = 0,
     #[doc = "1 - timer1"]
     TIMER1 = 1,
+    #[doc = "2 - usb0"]
+    USB0 = 2,
+    #[doc = "3 - usb0_ep_control"]
+    USB0_EP_CONTROL = 3,
+    #[doc = "4 - usb0_ep_in"]
+    USB0_EP_IN = 4,
+    #[doc = "5 - usb0_ep_out"]
+    USB0_EP_OUT = 5,
+    #[doc = "6 - test"]
+    TEST = 6,
 }
 #[doc = r" TryFromInterruptError"]
 #[derive(Debug, Copy, Clone)]
@@ -17,6 +27,11 @@ impl Interrupt {
         match value {
             0 => Ok(Interrupt::TIMER0),
             1 => Ok(Interrupt::TIMER1),
+            2 => Ok(Interrupt::USB0),
+            3 => Ok(Interrupt::USB0_EP_CONTROL),
+            4 => Ok(Interrupt::USB0_EP_IN),
+            5 => Ok(Interrupt::USB0_EP_OUT),
+            6 => Ok(Interrupt::TEST),
             _ => Err(TryFromInterruptError(())),
         }
     }
