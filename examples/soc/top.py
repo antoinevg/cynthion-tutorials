@@ -3,19 +3,21 @@ import logging, sys
 from amaranth             import *
 from amaranth.build       import Attrs, Pins, PinsN, Platform, Resource, Subsignal
 from amaranth.lib         import wiring
-from amaranth.lib.wiring  import Component, In, Out
+from amaranth.lib.wiring  import Component, In, Out, flipped
 
 from amaranth_soc               import csr, gpio, wishbone
 from amaranth_soc.csr.wishbone  import WishboneCSRBridge
 
-from tutorials.gateware.soc.cores  import sram, timer, uart
+from luna.gateware.usb.usb2.device  import USBDevice
+
+from tutorials.gateware.soc.cores  import sram, timer, uart, usb, test
 from tutorials.gateware.soc.cpu    import InterruptController, VexRiscv
 
 from tutorials.gateware.platform.cynthion  import SOC_RESOURCES
 
 
 class GPIOProvider(Component):
-    def __init__(self, id):
+    def __init__(self, id): # TODO id, index ?
         self.id   = id
         super().__init__({
             "pins": In(gpio.PinSignature()).array(8)
@@ -48,7 +50,7 @@ class LEDProvider(Component):
 
 
 class UARTProvider(Component):
-    def __init__(self, id):
+    def __init__(self, id): # TODO id, index ?
         self.id = id
         super().__init__({
             "pins": In(uart.PinSignature())
@@ -64,6 +66,38 @@ class UARTProvider(Component):
         return m
 
 
+# TODO I think it would be cooler to have a PhyProvider that can take a UTMI or ULPI platform resource.
+class ULPIPhyProvider(Component):
+    def __init__(self, id):
+        self.id = id
+        super().__init__({
+            "bus": In(usb.ulpi.Signature())
+        })
+
+    def elaborate(self, platform):
+        m = Module()
+        ulpi = platform.request(self.id)
+        m.d.comb += [
+            self.bus.data.i  .eq(ulpi.data.i),      # i TODO check nested
+            ulpi.data.o      .eq(self.bus.data.o),  # o TODO check nested
+            ulpi.data.oe     .eq(self.bus.data.oe), # o TODO check nested
+
+            # see ulpi.Signature
+            # ulpi.clk.o       .eq(self.bus.clk),     # o
+            # self.bus.nxt     .eq(ulpi.nxt.i),       # i
+            # ulpi.stp.o       .eq(self.bus.stp),     # o
+            # self.bus.dir     .eq(ulpi.dir.i),       # i
+            # ulpi.rst.o       .eq(self.bus.rst),     # o
+
+            ulpi.clk.o         .eq(self.bus.clk.o),   # o
+            self.bus.nxt.i     .eq(ulpi.nxt.i),       # i
+            ulpi.stp.o         .eq(self.bus.stp.o),   # o
+            self.bus.dir.i     .eq(ulpi.dir.i),       # i
+            ulpi.rst.o         .eq(self.bus.rst.o),   # o
+        ]
+        return m
+
+
 # - component: Soc ------------------------------------------------------------
 
 class Soc(Component):
@@ -74,16 +108,26 @@ class Soc(Component):
         self.domain = domain
 
         # configuration
-        self.mainram_base  = 0x00000000
-        self.mainram_size  = 0x4000
-        self.csr_base      = 0xf0000000
-        self.leds_base     = 0x0000000
-        self.gpio0_base    = 0x0000100
-        self.uart1_base    = 0x0000200
-        self.timer0_base   = 0x0000300
-        self.timer0_irq    = 0
-        self.timer1_base   = 0x0000400
-        self.timer1_irq    = 1
+        self.mainram_base         = 0x00000000
+        self.mainram_size         = 0x00010000  # 65536 bytes
+        self.csr_base             = 0xf0000000
+        self.leds_base            = 0x00000000
+        self.gpio0_base           = 0x00000100
+        self.uart1_base           = 0x00000200
+        self.timer0_base          = 0x00000300
+        self.timer0_irq           = 0
+        self.timer1_base          = 0x00000400
+        self.timer1_irq           = 1
+        self.usb0_base            = 0x00000500
+        self.usb0_irq             = 2
+        self.usb0_ep_control_base = 0x00000600
+        self.usb0_ep_control_irq  = 3
+        self.usb0_ep_in_base      = 0x00000700
+        self.usb0_ep_in_irq       = 4
+        self.usb0_ep_out_base     = 0x00000800
+        self.usb0_ep_out_irq      = 5
+        self.test_base            = 0x00000900
+        self.test_irq             = 6
 
         # cpu
         self.cpu = VexRiscv(
@@ -140,6 +184,25 @@ class Soc(Component):
         self.csr_decoder.add(self.timer1.bus, addr=self.timer1_base, name="timer1")
         self.interrupt_controller.add(self.timer1, name="timer1", number=self.timer1_irq)
 
+        # usb0 - target_phy
+        self.usb0            = usb.device.Peripheral()
+        self.usb0_ep_control = usb.ep_control.Peripheral()
+        self.usb0_ep_in      = usb.ep_in.Peripheral()
+        self.usb0_ep_out     = usb.ep_out.Peripheral()
+        self.csr_decoder.add(self.usb0.bus,            addr=self.usb0_base,            name="usb0")
+        self.csr_decoder.add(self.usb0_ep_control.bus, addr=self.usb0_ep_control_base, name="usb0_ep_control")
+        self.csr_decoder.add(self.usb0_ep_in.bus,      addr=self.usb0_ep_in_base,      name="usb0_ep_in")
+        self.csr_decoder.add(self.usb0_ep_out.bus,     addr=self.usb0_ep_out_base,     name="usb0_ep_out")
+        self.interrupt_controller.add(self.usb0,            name="usb0",            number=self.usb0_irq)
+        self.interrupt_controller.add(self.usb0_ep_control, name="usb0_ep_control", number=self.usb0_ep_control_irq)
+        self.interrupt_controller.add(self.usb0_ep_in,      name="usb0_ep_in",      number=self.usb0_ep_in_irq)
+        self.interrupt_controller.add(self.usb0_ep_out,     name="usb0_ep_out",     number=self.usb0_ep_out_irq)
+
+        # test
+        self.test = test.Peripheral()
+        self.csr_decoder.add(self.test.bus, addr=self.test_base, name="test")
+        self.interrupt_controller.add(self.test, name="test", number=self.test_irq)
+
         # wishbone csr bridge
         self.wb_to_csr = WishboneCSRBridge(self.csr_decoder.bus, data_width=32)
         self.wb_decoder.add(self.wb_to_csr.wb_bus, addr=self.csr_base, sparse=False, name="wb_to_csr")
@@ -190,6 +253,18 @@ class Soc(Component):
         # timer1
         m.submodules += self.timer1
 
+        # usb0 - target_phy
+        ulpi0_provider = ULPIPhyProvider("target_phy")
+        usb0_device = USBDevice(bus=ulpi0_provider.bus)
+        usb0_device.add_endpoint(self.usb0_ep_control)
+        usb0_device.add_endpoint(self.usb0_ep_in)
+        usb0_device.add_endpoint(self.usb0_ep_out)
+        m.d.comb += self.usb0.attach(usb0_device) # TODO wiring.connect() ?
+        m.submodules += [ulpi0_provider, self.usb0, usb0_device]
+
+        # timer1
+        m.submodules += self.test
+
         # wishbone csr bridge
         m.submodules += self.wb_to_csr
 
@@ -214,19 +289,19 @@ class Soc(Component):
         debug_io = platform.request("debug", 0)
         m.d.comb += [
             pmod_io.oe    .eq(1),
-            pmod_io.o[0]  .eq(self.timer0._sub_0.i),
-            pmod_io.o[1]  .eq(self.timer0._sub_0.trg),
-            pmod_io.o[2]  .eq(self.timer0._events._enable.element.r_data),
-            pmod_io.o[3]  .eq(self.timer0._events._pending.element.r_data[0]),
-            pmod_io.o[4]  .eq(self.timer0._events._pending.element.r_data[1]),
+            #pmod_io.o[]  .eq(),
 
-            pmod_io.o[5]  .eq(self.timer0.irq),
-            pmod_io.o[6]  .eq(self.interrupt_controller.pending),
+            #pmod_io.o     .eq(self.test.debug),
+            #pmod_io.o     .eq(self.usb0_ep_control.debug),
+            pmod_io.o[0:3] .eq(self.usb0_ep_in.debug[0:3]),
+            pmod_io.o[3:6] .eq(self.usb0_ep_out.debug[3:6]),
 
-            pmod_io.o[7]  .eq(self.timer1.irq),
+            # interrupts
+            pmod_io.o[6]  .eq(self.usb0.irq),
+            pmod_io.o[7]  .eq(self.usb0_ep_control.irq),
+            debug_io.a.o  .eq(self.usb0_ep_in.irq),
+            debug_io.b.o  .eq(self.usb0_ep_out.irq),
 
-            #debug_io.a.o  .eq(self.timer0.irq),
-            #debug_io.b.o  .eq(self.timer1.irq),
         ]
 
         return DomainRenamer({"sync": self.domain})(m)
