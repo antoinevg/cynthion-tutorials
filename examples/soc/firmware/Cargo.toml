@@ -10,6 +10,11 @@ riscv = { version = "=0.10.1", features = ["critical-section-single-hart"] }
 riscv-rt = { version = "=0.11.0" }
 panic-halt = "0.2.0"
 pac = { path="../pac", default-features = false, features = ["critical-section", "vexriscv"] }
-hal = { path="../hal", default-features = false, features = ["vexriscv"] }
+lunasoc-hal = { path="../lunasoc-hal", default-features = false, features = ["usb", "vexriscv"] }
 
+heapless = { version = "0.8.0", default-features = false, features = ["mpmc_large"] }
 log = { version="=0.4.17", features = ["release_max_level_debug"] }
+
+[[example]]
+name = "acm_serial"
+required-features = ["lunasoc-hal/usb"]

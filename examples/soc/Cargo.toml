@@ -1,8 +1,9 @@
 [workspace]
 members = [
-    "hal",
-    "pac",
     "firmware",
+    "lunasoc-hal",
+    "pac",
+    "smolusb",
 ]
 resolver = "2"
 

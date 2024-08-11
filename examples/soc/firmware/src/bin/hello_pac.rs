@@ -7,11 +7,6 @@ use panic_halt as _;
 use riscv_rt::entry;
 
 use pac;
-use hal;
-
-hal::impl_serial! {
-    Serial1: pac::UART1,
-}
 
 // - riscv_rt::main -----------------------------------------------------------
 
@@ -21,11 +16,9 @@ fn main() -> ! {
     let leds   = &peripherals.LEDS;
     let gpio0  = &peripherals.GPIO0;
     let uart1  = &peripherals.UART1;
-    let timer0 = &peripherals.TIMER0;
 
     const MSG: &'static str = "Entering main loop.\n";
     uart_tx(&uart1, MSG);
-
 
     // configure leds, gpio0
     //
@@ -35,9 +28,6 @@ fn main() -> ! {
     let mode: u16 = 0b01_01_01_01_01_01_01_01;
     leds.mode().write(|w| unsafe { w.bits(mode) });
     gpio0.mode().write(|w| unsafe { w.bits(mode) });
-
-    // configure timer0
-    timer0.reload().write(|w| unsafe { w.value().bits(0xffffffff) });
 
     let mut direction = true;
     let mut led_state = 0b1100_0000;

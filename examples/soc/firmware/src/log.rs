@@ -4,7 +4,7 @@ use log::{Level, LevelFilter, Metadata, Record};
 
 use core::cell::RefCell;
 use core::fmt::Write;
-use crate::Serial1;
+use crate::hal::Serial1;
 
 // - initialization -----------------------------------------------------------
 
