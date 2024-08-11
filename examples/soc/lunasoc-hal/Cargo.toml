@@ -1,5 +1,5 @@
 [package]
-name = "hal"
+name = "lunasoc-hal"
 version = "0.0.0"
 authors = ["Great Scott Gadgets <dev@greatscottgadgets.com>"]
 license = "BSD-3-Clause"
@@ -43,10 +43,10 @@ vexriscv = [
 nightly = []
 
 # build smolusb hal driver
-#usb = [
-#    "log",
-#    "smolusb",
-#]
+usb = [
+    "log",
+    "smolusb",
+]
 
 
 # - dependencies --------------------------------------------------------------
@@ -55,10 +55,10 @@ nightly = []
 embedded-hal = "=1.0.0-alpha.9"
 embedded-hal-0 = { package = "embedded-hal", version = "=0.2.7", features = ["unproven"] }
 embedded-hal-nb = "=1.0.0-alpha.1"
-log = { version = "=0.4.17", optional = true }
 nb = "=1.1.0"
 riscv = { version = "=0.10.1" }
-#smolusb = { version = "0.0", path = "../smolusb", optional = true }
+log = { version = "=0.4.17", optional = true }
+smolusb = { version = "0.1", path = "../smolusb", optional = true }
 
 # - dev-dependencies ----------------------------------------------------------
 
