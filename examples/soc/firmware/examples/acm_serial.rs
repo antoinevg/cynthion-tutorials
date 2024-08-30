@@ -252,13 +252,16 @@ fn main() -> ! {
     let mut control_usb0 = Control::<_, MAX_CONTROL_RESPONSE_SIZE>::new(
         0,
         Descriptors {
+            // required
             device_speed: DEVICE_SPEED,
             device_descriptor: acm::DEVICE_DESCRIPTOR,
             configuration_descriptor: acm::CONFIGURATION_DESCRIPTOR_0,
-            other_speed_configuration_descriptor: Some(acm::OTHER_SPEED_CONFIGURATION_DESCRIPTOR_0),
-            device_qualifier_descriptor: Some(acm::DEVICE_QUALIFIER_DESCRIPTOR),
             string_descriptor_zero: acm::STRING_DESCRIPTOR_0,
             string_descriptors: acm::STRING_DESCRIPTORS,
+            // optional
+            other_speed_configuration_descriptor: Some(acm::OTHER_SPEED_CONFIGURATION_DESCRIPTOR_0),
+            device_qualifier_descriptor: Some(acm::DEVICE_QUALIFIER_DESCRIPTOR),
+            microsoft10: None, // TODO
         }
         .set_total_lengths(),
     );

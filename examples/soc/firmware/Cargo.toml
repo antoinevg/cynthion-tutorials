@@ -5,6 +5,29 @@ authors = ["Great Scott Gadgets <dev@greatscottgadgets.com>"]
 license-file = "LICENSE.txt"
 edition = "2021"
 
+# - features ------------------------------------------------------------------
+
+[features]
+default = [
+    "vexriscv",
+    "vexriscv_dcache",
+]
+
+# select softcore
+minerva = [
+    "pac/minerva",
+]
+vexriscv = [
+    "pac/vexriscv",
+]
+vexriscv_dcache = []
+
+# select nightly toolchain
+nightly = [
+]
+
+alloc = []
+
 [dependencies]
 riscv = { version = "=0.10.1", features = ["critical-section-single-hart"] }
 riscv-rt = { version = "=0.11.0" }

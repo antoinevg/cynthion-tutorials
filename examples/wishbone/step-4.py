@@ -40,7 +40,7 @@ class WishbonePeripheral(Component):
         })
 
         # registers
-        registers = csr.Builder(addr_width=4, data_width=8, name="bob")
+        registers = csr.Builder(addr_width=4, data_width=8)
         self.reg_leds = registers.add("leds", LedRegister(reset=1))
 
         # csr bridge

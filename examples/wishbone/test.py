@@ -2,8 +2,11 @@ import sys
 import time
 import usb
 
-VENDOR_ID=0x16d0
-PRODUCT_ID=0xf3b
+import cynthion
+
+
+VENDOR_ID  = cynthion.shared.usb.bVendorId.example
+PRODUCT_ID = cynthion.shared.usb.bProductId.example
 
 LEDS_BASE_ADDR   = 0x10
 

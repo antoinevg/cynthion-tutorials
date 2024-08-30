@@ -102,7 +102,7 @@ class Top(Elaboratable):
         usb_bridge = WishboneBridge()
         m.submodules += usb_bridge
 
-        # wishbone componet
+        # wishbone component
         wishbone_component = DomainRenamer("usb")(WishboneComponent(pads=leds))
         m.submodules += wishbone_component
 
