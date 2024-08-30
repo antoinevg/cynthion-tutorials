@@ -132,16 +132,18 @@ macro_rules! impl_usb {
                     self.device_speed = device_speed;
                     match device_speed {
                         Speed::High => {
-                            self.device.control().modify(|_, w| w.full_speed_only().bit(false));
-                            self.device.control().modify(|_, w| w.low_speed_only().bit(false));
+                            self.device.control().modify(|_, w| {
+                                w.full_speed_only().bit(false).low_speed_only().bit(false)
+                            });
+                            //self.device.control().modify(|_, w| w.low_speed_only().bit(false));
                         },
                         Speed::Full => {
                             self.device.control().modify(|_, w| w.full_speed_only().bit(true));
                             self.device.control().modify(|_, w| w.low_speed_only().bit(false));
                         },
                         Speed::Low => {
-                            self.device.control().write(|w| w.full_speed_only().bit(false));
-                            self.device.control().write(|w| w.low_speed_only().bit(true));
+                            self.device.control().modify(|_, w| w.full_speed_only().bit(false));
+                            self.device.control().modify(|_, w| w.low_speed_only().bit(true));
                         }
                         _ => {
                             log::warn!("Requested unsupported device speed '{:?}'. Ignoring request and setting device to 'Speed::High'.", device_speed);
@@ -249,19 +251,19 @@ macro_rules! impl_usb {
                 /// Clear the PID toggle bit for the given endpoint address.
                 ///
                 /// TODO this works most of the time, but not always ...
-                /// TODO pass in endpoint number and direction separately
                 ///
                 /// Also see: <https://github.com/greatscottgadgets/luna/issues/166>
-                fn clear_feature_endpoint_halt(&self, endpoint_address: u8) {
-                    let endpoint_number = endpoint_address & 0xf;
+                fn clear_feature_endpoint_halt(&self, endpoint_number: u8, direction: Direction) {
+                    match direction {
+                        Direction::HostToDevice => { // OUT
+                            self.ep_out.endpoint().write(|w| unsafe { w.number().bits(endpoint_number) });
+                            self.ep_out.pid().write(|w| w.toggle().bit(false));
 
-                    if (endpoint_address & 0x80) == 0 {  // HostToDevice
-                        self.ep_out.endpoint().write(|w| unsafe { w.number().bits(endpoint_number) });
-                        self.ep_out.pid().write(|w| w.toggle().bit(false));
-
-                    } else { // DeviceToHost
-                        self.ep_in.endpoint().write(|w| unsafe { w.number().bits(endpoint_number) });
-                        self.ep_in.pid().write(|w| w.toggle().bit(false));
+                        }
+                        Direction::DeviceToHost => { // IN
+                            self.ep_in.endpoint().write(|w| unsafe { w.number().bits(endpoint_number) });
+                            self.ep_in.pid().write(|w| w.toggle().bit(false));
+                        }
                     }
                 }
             }
@@ -379,13 +381,6 @@ macro_rules! impl_usb {
                     // 0. clear receive fifo in case the previous transaction wasn't handled
                     if self.ep_out.status().read().have().bit() {
                         log::warn!("  {} priming out endpoint {} with unread data", stringify!($USBX), endpoint_number);
-
-                        /*let mut rx_buffer: [u8; smolusb::EP_MAX_PACKET_SIZE] = [0; smolusb::EP_MAX_PACKET_SIZE];
-                        let bytes_read = self.read(endpoint_number, &mut rx_buffer);
-                        log::warn!("  got {} bytes: -> {:?}",
-                              bytes_read,
-                              &rx_buffer[0..bytes_read],
-                        );*/
                         self.ep_out.reset().write(|w| w.high().bit(true));
                     }
 
@@ -439,33 +434,36 @@ macro_rules! impl_usb {
                 where
                     I: Iterator<Item = u8>
                 {
-                    let max_packet_size = match (self.device_speed, endpoint_number) {
-                        (_, 0) => 64,
-                        (Speed::High, _) => smolusb::EP_MAX_PACKET_SIZE,
-                        (Speed::Full, _) => 64,
-                        (_, _) => {
-                            log::warn!("{}::write unsupported device speed: {:?}", stringify!($USBX), self.device_speed);
-                            64
-                        }
-                    };
-                    self.write_with_packet_size(endpoint_number, iter, max_packet_size)
+                    let max_packet_size = smolusb::max_packet_size(self.device_speed, endpoint_number);
+                    self.write_with_packet_size(endpoint_number, None, iter, max_packet_size)
                 }
 
-                fn write_with_packet_size<'a, I>(&self, endpoint_number: u8, iter: I, packet_size: usize) -> usize
+                fn write_requested<'a, I>(&self, endpoint_number: u8, requested_length: usize, iter: I) -> usize
+                where
+                    I: Iterator<Item = u8>
+                {
+                    let max_packet_size = smolusb::max_packet_size(self.device_speed, endpoint_number);
+                    self.write_with_packet_size(endpoint_number, Some(requested_length), iter, max_packet_size)
+                }
+
+                fn write_with_packet_size<'a, I>(&self, endpoint_number: u8, requested_length: Option<usize>, iter: I, packet_size: usize) -> usize
                 where
                     I: Iterator<Item = u8>
                 {
                     unsafe { self.set_tx_ack_active(endpoint_number); }
 
                     // check if output FIFO is empty
-                    // FIXME return a GreatError::DeviceOrResourceBusy on timeout
                     let mut timeout = 0;
                     while self.ep_in.status().read().have().bit() {
                         if timeout == 0 {
                             log::warn!("  {} clear tx", stringify!($USBX));
                         } else if timeout > DEFAULT_TIMEOUT {
                             self.ep_in.reset().write(|w| w.high().bit(true));
+                            unsafe {
+                                self.clear_tx_ack_active(endpoint_number);
+                            }
                             log::error!("  {} clear tx timeout", stringify!($USBX));
+                            return 0;
                         }
                         timeout += 1;
                     }
@@ -477,7 +475,9 @@ macro_rules! impl_usb {
 
                         // check if we've written a packet yet and need to send it
                         if bytes_written % packet_size == 0 {
-                            log::debug!("1a");
+                            unsafe {
+                                self.set_tx_ack_active(endpoint_number);
+                            }
                             // prime the IN endpoint to send it
                             self.ep_in
                                 .endpoint()
@@ -485,9 +485,13 @@ macro_rules! impl_usb {
 
                             // wait for transmission to complete
                             let mut timeout = 0;
-                            while self.ep_in.status().read().have().bit() {
+                            //while self.ep_in.status().read().have().bit() {
+                            while unsafe { self.is_tx_ack_active(endpoint_number) } {
                                 timeout += 1;
                                 if timeout > DEFAULT_TIMEOUT {
+                                    unsafe {
+                                        self.clear_tx_ack_active(endpoint_number);
+                                    }
                                     log::error!(
                                         "{}::write timed out after {} bytes",
                                         stringify!($USBX),
@@ -500,17 +504,42 @@ macro_rules! impl_usb {
                         }
                     }
 
-                    // finally, prime IN endpoint to either send
-                    // remaining queued data or a ZLP if the fifo
-                    // is empty and transmission is complete
-                    self.ep_in
-                        .endpoint()
-                        .write(|w| unsafe { w.number().bits(endpoint_number) });
-                    while unsafe { self.is_tx_ack_active(endpoint_number) } {}
+                    // The host recognizes an EOT (end of transaction) when
+                    // one of the following are true:
+                    //
+                    //   a. A partial packet is sent which makes bytes_written = requested size
+                    //      - need to prime to empty fifo
+                    //   b. A partial packet is sent which is < packet_size
+                    //      - need to prime to empty fifo
+                    //   c. A full packet is sent which makes bytes_written = requested size
+                    //      - no need to prime, fifo is empty
+                    //   d. A full packet is sent, followed by a zlp
+                    //      - fifo is empty, but need to prime to send a zlp so host know it's EOT
+                    //   e. An emptry packet is sent, followed by a zlp
+                    //      - fifo is empty, but need to prime to send a zlp so host know it's EOT
+                    //
+                    let is_partial_packet = bytes_written % packet_size != 0;
+                    let is_requested_length = if let Some(requested_length) = requested_length {
+                        bytes_written == requested_length
+                    } else {
+                        false
+                    };
+                    let is_zlp = bytes_written == 0;
+
+                    if !is_partial_packet && is_requested_length && !is_zlp {
+                        // c. already sent, no zlp required
+                    } else {
+                        // a. b. d. e.
+                        unsafe {
+                            self.set_tx_ack_active(endpoint_number);
+                        }
+                        self.ep_in
+                            .endpoint()
+                            .write(|w| unsafe { w.number().bits(endpoint_number) });
+                    }
 
                     bytes_written
                 }
-
             }
 
             // mark implementation as complete
