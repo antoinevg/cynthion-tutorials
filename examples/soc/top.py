@@ -1,4 +1,4 @@
-import logging, sys
+import logging, os, sys
 
 from amaranth             import *
 from amaranth.build       import Attrs, Pins, PinsN, Platform, Resource, Subsignal
@@ -10,22 +10,22 @@ from amaranth_soc.csr.wishbone  import WishboneCSRBridge
 
 from luna.gateware.usb.usb2.device  import USBDevice
 
-from tutorials.gateware.soc.cores  import sram, timer, uart, usb, test
+from tutorials.gateware.soc.cores  import psram, sram, timer, uart, usb, test
 from tutorials.gateware.soc.cpu    import InterruptController, VexRiscv
 
 from tutorials.gateware.platform.cynthion  import SOC_RESOURCES
 
 
 class GPIOProvider(Component):
-    def __init__(self, id): # TODO id, index ?
-        self.id   = id
+    def __init__(self, index): # TODO id, index
+        self.index   = index
         super().__init__({
             "pins": In(gpio.PinSignature()).array(8)
         })
 
     def elaborate(self, platform):
         m = Module()
-        user_pmod = platform.request("user_pmod", self.id)
+        user_pmod = platform.request("user_pmod", self.index)
         m.d.comb += user_pmod.oe.eq(1)
         for n in range(8):
             m.d.comb += user_pmod.o[n] .eq(self.pins[n].o)
@@ -44,21 +44,24 @@ class LEDProvider(Component):
     def elaborate(self, platform):
         m = Module()
         for n in range(self.pin_count):
-            led = platform.request("led", n)
-            m.d.comb += led.o.eq(self.pins[n].o)
+            try:
+                led = platform.request("led", n)
+                m.d.comb += led.o.eq(self.pins[n].o)
+            except:
+                logging.warning(f"Platform does not support led {n}")
         return m
 
 
 class UARTProvider(Component):
-    def __init__(self, id): # TODO id, index ?
-        self.id = id
+    def __init__(self, index): # TODO id, index
+        self.index = index
         super().__init__({
             "pins": In(uart.PinSignature())
         })
 
     def elaborate(self, platform):
         m = Module()
-        uart = platform.request("uart", self.id)
+        uart = platform.request("uart", self.index)
         m.d.comb += [
             self.pins.rx .eq(uart.rx.i),
             uart.tx.o    .eq(self.pins.tx),
@@ -76,25 +79,29 @@ class ULPIPhyProvider(Component):
 
     def elaborate(self, platform):
         m = Module()
-        ulpi = platform.request(self.id)
-        m.d.comb += [
-            self.bus.data.i  .eq(ulpi.data.i),      # i TODO check nested
-            ulpi.data.o      .eq(self.bus.data.o),  # o TODO check nested
-            ulpi.data.oe     .eq(self.bus.data.oe), # o TODO check nested
+        try:
+            ulpi = platform.request(self.id)
+            m.d.comb += [
+                self.bus.data.i  .eq(ulpi.data.i),      # i TODO check nested
+                ulpi.data.o      .eq(self.bus.data.o),  # o TODO check nested
+                ulpi.data.oe     .eq(self.bus.data.oe), # o TODO check nested
 
-            # see ulpi.Signature
-            # ulpi.clk.o       .eq(self.bus.clk),     # o
-            # self.bus.nxt     .eq(ulpi.nxt.i),       # i
-            # ulpi.stp.o       .eq(self.bus.stp),     # o
-            # self.bus.dir     .eq(ulpi.dir.i),       # i
-            # ulpi.rst.o       .eq(self.bus.rst),     # o
+                # see ulpi.Signature
+                # ulpi.clk.o       .eq(self.bus.clk),     # o
+                # self.bus.nxt     .eq(ulpi.nxt.i),       # i
+                # ulpi.stp.o       .eq(self.bus.stp),     # o
+                # self.bus.dir     .eq(ulpi.dir.i),       # i
+                # ulpi.rst.o       .eq(self.bus.rst),     # o
 
-            ulpi.clk.o         .eq(self.bus.clk.o),   # o
-            self.bus.nxt.i     .eq(ulpi.nxt.i),       # i
-            ulpi.stp.o         .eq(self.bus.stp.o),   # o
-            self.bus.dir.i     .eq(ulpi.dir.i),       # i
-            ulpi.rst.o         .eq(self.bus.rst.o),   # o
-        ]
+                ulpi.clk.o         .eq(self.bus.clk.o),   # o
+                self.bus.nxt.i     .eq(ulpi.nxt.i),       # i
+                ulpi.stp.o         .eq(self.bus.stp.o),   # o
+                self.bus.dir.i     .eq(ulpi.dir.i),       # i
+                ulpi.rst.o         .eq(self.bus.rst.o),   # o
+            ]
+        except:
+            logging.warning(f"Platform does not support a {self.id} port for usb")
+
         return m
 
 
@@ -108,8 +115,10 @@ class Soc(Component):
         self.domain = domain
 
         # configuration
-        self.mainram_base         = 0x00000000
-        self.mainram_size         = 0x00010000  # 65536 bytes
+        self.blockram_base        = 0x00000000
+        self.blockram_size        = 0x00010000  # 65536 bytes
+        self.hyperram_base        = 0x20000000  # Winbond W956A8MBYA6I
+        self.hyperram_size        = 0x08000000  # 8 * 1024 * 1024
         self.csr_base             = 0xf0000000
         self.leds_base            = 0x00000000
         self.gpio0_base           = 0x00000100
@@ -132,7 +141,7 @@ class Soc(Component):
         # cpu
         self.cpu = VexRiscv(
             variant="cynthion+jtag",
-            reset_addr=self.mainram_base
+            reset_addr=self.blockram_base
         )
 
         # interrupt controller
@@ -152,9 +161,13 @@ class Soc(Component):
             features={"cti", "bte", "err"}
         )
 
-        # mainram
-        self.mainram = sram.Peripheral(size=self.mainram_size)
-        self.wb_decoder.add(self.mainram.bus, addr=self.mainram_base, name="mainram")
+        # blockram
+        self.blockram = sram.Peripheral(size=self.blockram_size)
+        self.wb_decoder.add(self.blockram.bus, addr=self.blockram_base, name="blockram")
+
+        # hyperram
+        self.hyperram = psram.Peripheral(size=self.hyperram_size)
+        self.wb_decoder.add(self.hyperram.bus, addr=self.hyperram_base, name="hyperram")
 
         # csr decoder
         self.csr_decoder = csr.Decoder(addr_width=28, data_width=8)
@@ -224,8 +237,11 @@ class Soc(Component):
         # TODO wiring.connect(m, self.cpu.irq_external, self.irqs.pending)
         m.d.comb += self.cpu.irq_external.eq(self.interrupt_controller.pending)
 
-        # mainram
-        m.submodules += self.mainram
+        # blockram
+        m.submodules += self.blockram
+
+        # hyperram
+        m.submodules += self.hyperram
 
         # csr decoder
         m.submodules += self.csr_decoder
@@ -254,7 +270,7 @@ class Soc(Component):
         m.submodules += self.timer1
 
         # usb0 - target_phy
-        ulpi0_provider = ULPIPhyProvider("target_phy")
+        ulpi0_provider = ULPIPhyProvider(platform.default_usb_connection)
         usb0_device = USBDevice(bus=ulpi0_provider.bus)
         usb0_device.add_endpoint(self.usb0_ep_control)
         usb0_device.add_endpoint(self.usb0_ep_in)
@@ -262,7 +278,7 @@ class Soc(Component):
         m.d.comb += self.usb0.attach(usb0_device) # TODO wiring.connect() ?
         m.submodules += [ulpi0_provider, self.usb0, usb0_device]
 
-        # timer1
+        # test
         m.submodules += self.test
 
         # wishbone csr bridge
@@ -284,27 +300,28 @@ class Soc(Component):
             self.cpu.jtag_tck     .eq(jtag0_io.tck.i),
         ]
 
-        # debug
+        # Debug
         pmod_io  = platform.request("user_pmod", 0)
         debug_io = platform.request("debug", 0)
+
+        clk_fast = Signal(4)
+        clk_sync = Signal(4)
+        clk_usb  = Signal(4)
+        m.d.fast += clk_fast.eq(clk_fast + 1)
+        m.d.sync += clk_sync.eq(clk_sync + 1)
+        m.d.usb  += clk_usb .eq(clk_usb + 1)
+
         m.d.comb += [
             pmod_io.oe    .eq(1),
-            #pmod_io.o[]  .eq(),
-
-            #pmod_io.o     .eq(self.test.debug),
-            #pmod_io.o     .eq(self.usb0_ep_control.debug),
-            pmod_io.o[0:3] .eq(self.usb0_ep_in.debug[0:3]),
-            pmod_io.o[3:6] .eq(self.usb0_ep_out.debug[3:6]),
-
-            # interrupts
-            pmod_io.o[6]  .eq(self.usb0.irq),
-            pmod_io.o[7]  .eq(self.usb0_ep_control.irq),
-            debug_io.a.o  .eq(self.usb0_ep_in.irq),
-            debug_io.b.o  .eq(self.usb0_ep_out.irq),
-
+            pmod_io.o     .eq(self.hyperram.debug_wb),
+            debug_io.a.o  .eq(self.hyperram.debug_io[0]),
+            debug_io.b.o  .eq(self.hyperram.debug_io[1]),
         ]
 
-        return DomainRenamer({"sync": self.domain})(m)
+        return DomainRenamer({
+            "sync": self.domain,
+            "fast": "sync", # cynthion hyperram currently only works with the soc at 120 MHz
+        })(m)
 
 
 # - module: Top ---------------------------------------------------------------
@@ -320,7 +337,15 @@ class Top(Elaboratable):
         m = Module()
 
         # generate our domain clocks/resets
+
         m.submodules.car = platform.clock_domain_generator()
+        # CLOCK_FREQUENCIES = {
+        #     "fast": 120, # cynthion hyperram currently only works with the soc at 120 MHz
+        #     "sync": 60,
+        #     "usb":  60,
+        # }
+        # from luna.gateware.architecture.car import LunaECP5DomainGenerator
+        # m.submodules.car = LunaECP5DomainGenerator(clock_frequencies=CLOCK_FREQUENCIES)
 
         # add soc to design
         m.submodules += self.soc
@@ -337,6 +362,11 @@ if __name__ == "__main__":
     # configure logging
     configure_default_logging()
     logging.getLogger().setLevel(logging.DEBUG)
+
+    # enable to build for tiliqua
+    if False:
+        from tiliqua.tiliqua_platform  import TiliquaPlatform
+        os.environ["LUNA_PLATFORM"] = "tiliqua.tiliqua_platform:TiliquaPlatform"
 
     # select platform
     platform = get_appropriate_platform()
