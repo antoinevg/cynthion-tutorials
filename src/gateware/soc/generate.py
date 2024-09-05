@@ -55,7 +55,6 @@ class Introspect():
         window: MemoryMap
         for window, name, (start, stop, end) in self.memory_map.windows():
             for resource, path, range in window.resources():
-                name = path[0]
                 wb_peripherals[name].append((resource, path, range))
 
         return wb_peripherals
