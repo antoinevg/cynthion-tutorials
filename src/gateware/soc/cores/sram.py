@@ -53,7 +53,7 @@ class Peripheral(wiring.Component):
         Wishbone bus interface.
     """
     # TODO raise bus.err if read-only and a bus write is attempted.
-    def __init__(self, *, size, data_width=32, granularity=8, writable=True):
+    def __init__(self, *, size, data_width=32, granularity=8, writable=True, name="sram"):
         if not isinstance(size, int) or size <= 0 or size & size-1:
             raise ValueError("Size must be an integer power of two, not {!r}"
                              .format(size))
@@ -62,21 +62,24 @@ class Peripheral(wiring.Component):
                              "of {} ({} / {})"
                               .format(size, data_width // granularity, data_width, granularity))
 
+        self.size        = size
+        self.granularity = granularity
+        self.writable    = writable
+        self.name        = name
+
         size_words = (size * granularity) // data_width
         self._mem  = memory.Memory(depth=size_words, shape=data_width, init=[])
 
         super().__init__({
-            "bus": In(wishbone.Signature(addr_width=exact_log2(size_words), data_width=data_width,
+            "bus": In(wishbone.Signature(addr_width=exact_log2(size_words),
+                                         data_width=data_width,
                                          granularity=granularity)),
         })
 
         memory_map = MemoryMap(addr_width=exact_log2(size), data_width=granularity)
-        memory_map.add_resource(name=("memory",), size=size, resource=self)
+        memory_map.add_resource(name=("memory", self.name,), size=size, resource=self)
         self.bus.memory_map = memory_map
 
-        self.size = size
-        self.granularity = granularity
-        self.writable = writable
 
     @property
     def init(self):
