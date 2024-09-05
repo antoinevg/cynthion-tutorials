@@ -14,6 +14,8 @@ from luna.gateware.stream.generator     import StreamSerializer
 from luna.gateware.usb.request.control  import ControlRequestHandler
 from luna.gateware.usb.usb2.transfer    import USBInStreamInterface
 
+import cynthion
+
 class VendorRequestHandler(ControlRequestHandler):
     REQUEST_READ_REG   = 0
     REQUEST_WRITE_REG  = 1
@@ -184,8 +186,8 @@ class WishboneBridge(Elaboratable):
 
         # We'll need a device descriptor...
         with descriptors.DeviceDescriptor() as d:
-            d.idVendor           = 0x16d0
-            d.idProduct          = 0x0f3b
+            d.idVendor           = cynthion.shared.usb.bVendorId.example
+            d.idProduct          = cynthion.shared.usb.bProductId.example
 
             d.iManufacturer      = "Great Scott Gadgets"
             d.iProduct           = "Cynthion Wishbone Bridge"
@@ -216,8 +218,7 @@ class WishboneBridge(Elaboratable):
         m = Module()
 
         # Create our USB device interface...
-        #ulpi = platform.request(platform.default_usb_connection)
-        ulpi = platform.request("aux_phy")
+        ulpi = platform.request("target_phy")
         m.submodules.usb = usb = USBDevice(bus=ulpi)
 
         # Add our standard control endpoint to the device.
