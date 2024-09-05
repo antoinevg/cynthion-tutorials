@@ -9,8 +9,20 @@ __pycache__/
 build/
 **/scala/project/target/
 **/scala/target/
+*.bit
 
 # Rust
 **/target/
 Cargo.lock
 **/*.rs.bk
+
+# Cleanup
+**/deleteme/
+**/old/
+TODO
+*.md
+Makefile
+examples/soc/firmware/.cargo/cynthion.sh
+examples/soc/firmware/.cargo/flash.cfg
+*.svd
+examples/soc/smolusb
