@@ -13,7 +13,7 @@ from amaranth.utils       import exact_log2
 from amaranth_soc         import wishbone
 from amaranth_soc.memory  import MemoryMap
 
-from ...interface.psram   import FakeHyperRAMDQSInterface, HyperRAMDQSInterface, HyperRAMDQSPHY
+from ...interface.psram   import HyperRAMDQSInterface, HyperRAMDQSPHY
 
 class Peripheral(wiring.Component):
 
@@ -81,14 +81,10 @@ class Peripheral(wiring.Component):
         m.submodules.arbiter = self._hram_arbiter
 
         # phy and controller
-        if platform is None:
-            self.psram = psram = FakeHyperRAMDQSInterface()
-            m.submodules += self.psram
-        else:
-            psram_bus = platform.request('ram', dir={'rwds':'-', 'dq':'-', 'cs':'-'})
-            self.psram_phy = HyperRAMDQSPHY(bus=psram_bus)
-            self.psram = psram = HyperRAMDQSInterface(phy=self.psram_phy.phy)
-            m.submodules += [self.psram_phy, self.psram]
+        psram_bus = platform.request('ram', dir={'rwds':'-', 'dq':'-', 'cs':'-'})
+        self.psram_phy = HyperRAMDQSPHY(bus=psram_bus)
+        self.psram = psram = HyperRAMDQSInterface(phy=self.psram_phy.phy)
+        m.submodules += [self.psram_phy, self.psram]
 
         m.d.comb += [
             psram.single_page     .eq(0),
