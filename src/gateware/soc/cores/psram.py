@@ -1,6 +1,7 @@
-# This file re-uses some of `interfaces/psram` from LUNA.
 #
-# Copyright (c) 2020 Great Scott Gadgets <info@greatscottgadgets.com>
+# This file is part of LUNA.
+#
+# Copyright (c) 2020-2024 Great Scott Gadgets <info@greatscottgadgets.com>
 # Copyright (c) 2024 S. Holzapfel, apfelaudio UG <info@apfelaudio.com>
 #
 # SPDX-License-Identifier: BSD-3-Clause
@@ -18,13 +19,7 @@ from ...interface.psram   import HyperRAMDQSInterface, HyperRAMDQSPHY
 class Peripheral(wiring.Component):
 
     """
-    Wishbone PSRAM peripheral with multiple masters and burst support.
-
-    You can add this to an SoC as an ordinary peripheral, however it also
-    has an internal arbiter (for multiple DMA masters) using add_master().
-
-    Default region name is "ram" as that is accepted by luna-soc SVD generation
-    as a memory region, in the future "psram" might also be acceptable.
+    Wishbone PSRAM peripheral with burst support.
     """
 
     def __init__(self, *, size, data_width=32, granularity=8, name="psram"):
@@ -54,14 +49,6 @@ class Peripheral(wiring.Component):
         })
         self.bus.memory_map = memory_map
 
-        # hram arbiter
-        self._hram_arbiter = wishbone.Arbiter(addr_width=exact_log2(self.mem_depth),
-                                              data_width=data_width,
-                                              granularity=granularity,
-                                              features={"cti", "bte"})
-        self._hram_arbiter.add(flipped(self.bus))
-        self.shared_bus = self._hram_arbiter.bus
-
         # phy and controller
         self.psram_phy = None
         self.psram     = None
@@ -71,14 +58,8 @@ class Peripheral(wiring.Component):
         self.debug_io = Signal(2)
 
 
-    def add_master(self, bus):
-        self._hram_arbiter.add(bus)
-
     def elaborate(self, platform):
         m = Module()
-
-        # arbiter
-        m.submodules.arbiter = self._hram_arbiter
 
         # phy and controller
         psram_bus = platform.request('ram', dir={'rwds':'-', 'dq':'-', 'cs':'-'})
@@ -89,45 +70,45 @@ class Peripheral(wiring.Component):
         m.d.comb += [
             psram.single_page     .eq(0),
             psram.register_space  .eq(0),
-            psram.perform_write   .eq(self.shared_bus.we),
+            psram.perform_write   .eq(self.bus.we),
         ]
 
         # debug
         ready_go  = Signal()
         state_go  = Signal()
-        m.d.comb += ready_go .eq(self.shared_bus.cyc & self.shared_bus.stb & psram.idle)
+        m.d.comb += ready_go .eq(self.bus.cyc & self.bus.stb & psram.idle)
 
         with m.FSM() as fsm:
             m.d.comb += state_go   .eq(fsm.ongoing("GO")) # debug
 
             with m.State('IDLE'):
-                with m.If(self.shared_bus.cyc & self.shared_bus.stb & psram.idle):
+                with m.If(self.bus.cyc & self.bus.stb & psram.idle):
                     m.d.sync += [
                         psram.start_transfer          .eq(1),
-                        psram.write_data              .eq(self.shared_bus.dat_w),
-                        psram.write_mask              .eq(~self.shared_bus.sel),
-                        psram.address                 .eq(self.shared_bus.adr << 1),
+                        psram.write_data              .eq(self.bus.dat_w),
+                        psram.write_mask              .eq(~self.bus.sel),
+                        psram.address                 .eq(self.bus.adr << 1),
                     ]
                     m.next = 'GO'
             with m.State('GO'):
                 m.d.sync += psram.start_transfer      .eq(0),
-                with m.If(self.shared_bus.cti != wishbone.CycleType.INCR_BURST):
+                with m.If(self.bus.cti != wishbone.CycleType.INCR_BURST):
                     m.d.comb += psram.final_word      .eq(1)
                 with m.If(psram.read_ready | psram.write_ready):
                     m.d.comb += [
-                        self.shared_bus.dat_r         .eq(psram.read_data),
-                        self.shared_bus.ack           .eq(1),
+                        self.bus.dat_r         .eq(psram.read_data),
+                        self.bus.ack           .eq(1),
                     ]
                     m.d.sync += [
-                        psram.write_data              .eq(self.shared_bus.dat_w),
-                        psram.write_mask              .eq(~self.shared_bus.sel),
+                        psram.write_data              .eq(self.bus.dat_w),
+                        psram.write_mask              .eq(~self.bus.sel),
                     ]
-                    with m.If(self.shared_bus.cti != wishbone.CycleType.INCR_BURST):
+                    with m.If(self.bus.cti != wishbone.CycleType.INCR_BURST):
                         m.d.comb += psram.final_word  .eq(1)
                         m.next = 'IDLE'
 
         # debug
-        bus = self.shared_bus
+        bus = self.bus
         m.d.comb += [
             #self.debug_wb[0:4]  .eq(psram.address),
             self.debug_wb[0:4]  .eq(psram.write_data),

@@ -1,7 +1,9 @@
 #
 # This file is part of LUNA.
 #
-# Copyright (c) 2020 Great Scott Gadgets <info@greatscottgadgets.com>
+# Copyright (c) 2020-2024 Great Scott Gadgets <info@greatscottgadgets.com>
+# Copyright (c) 2024 S. Holzapfel, apfelaudio UG <info@apfelaudio.com>
+#
 # SPDX-License-Identifier: BSD-3-Clause
 
 """ Interfaces to LUNA's PSRAM chips."""
