@@ -7,7 +7,11 @@
 
 MEMORY {
     /* 0x00010000 = 65536 bytes */
-    blockram : ORIGIN = 0x00000000, LENGTH = 0x00010000
+    /*blockram : ORIGIN = 0x00000000, LENGTH = 0x00010000*/
+    /*blockram : ORIGIN = 0x00000000, LENGTH = 0x00008000*/
+    /*blockram : ORIGIN = 0x00000000, LENGTH = 0x00004000*/
+    blockram : ORIGIN = 0x00000000, LENGTH = 0x00002000
+    /*blockram : ORIGIN = 0x00000000, LENGTH = 0x00001000*/
     hyperram : ORIGIN = 0x20000000, LENGTH = 0x08000000
 }
 

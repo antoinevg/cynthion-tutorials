@@ -50,8 +50,11 @@ class Peripheral(wiring.Component):
         self.bus.memory_map = memory_map
 
         # phy and controller
-        self.psram_phy = None
-        self.psram     = None
+        #self.psram_phy = None
+        #self.psram     = None
+        self.psram_phy = HyperRAMDQSPHY(bus=None)
+        self.psram = psram = HyperRAMDQSInterface(phy=self.psram_phy.phy)
+
 
         # debug signals
         self.debug_wb = Signal(8)
@@ -63,8 +66,10 @@ class Peripheral(wiring.Component):
 
         # phy and controller
         psram_bus = platform.request('ram', dir={'rwds':'-', 'dq':'-', 'cs':'-'})
-        self.psram_phy = HyperRAMDQSPHY(bus=psram_bus)
-        self.psram = psram = HyperRAMDQSInterface(phy=self.psram_phy.phy)
+        #self.psram_phy = HyperRAMDQSPHY(bus=psram_bus)
+        #self.psram = psram = HyperRAMDQSInterface(phy=self.psram_phy.phy)
+        self.psram_phy.bus = psram_bus
+        psram = self.psram
         m.submodules += [self.psram_phy, self.psram]
 
         m.d.comb += [

@@ -1,19 +1,23 @@
 import logging, os, sys
 
-from amaranth             import *
-from amaranth.build       import Attrs, Pins, PinsN, Platform, Resource, Subsignal
-from amaranth.lib         import wiring
-from amaranth.lib.wiring  import Component, In, Out, flipped
+from amaranth                             import *
+from amaranth.build                       import Attrs, Pins, PinsN, Platform, Resource, Subsignal
+from amaranth.lib                         import wiring
+from amaranth.lib.wiring                  import Component, In, Out, flipped
 
-from amaranth_soc               import csr, gpio, wishbone
-from amaranth_soc.csr.wishbone  import WishboneCSRBridge
+from amaranth_soc                         import csr, gpio, wishbone
+from amaranth_soc.csr.wishbone            import WishboneCSRBridge
 
-from luna.gateware.usb.usb2.device  import USBDevice
+from luna.gateware.usb.usb2.device        import USBDevice
 
-from tutorials.gateware.soc.cores  import psram, sram, timer, uart, usb, test
-from tutorials.gateware.soc.cpu    import InterruptController, VexRiscv
+from luna.gateware.usb.devices.ila        import USBIntegratedLogicAnalyzer
+from luna.gateware.utils.cdc              import synchronize
 
-from tutorials.gateware.platform.cynthion  import SOC_RESOURCES
+from tutorials.gateware.soc.cores         import ila, psram, sram, timer, uart, usb
+from tutorials.gateware.soc.cores         import test
+from tutorials.gateware.soc.cpu           import InterruptController, VexRiscv
+
+from tutorials.gateware.platform.cynthion import SOC_RESOURCES
 
 
 class GPIOProvider(Component):
@@ -116,7 +120,8 @@ class Soc(Component):
 
         # configuration
         self.blockram_base        = 0x00000000
-        self.blockram_size        = 0x00010000  # 65536 bytes
+        #self.blockram_size        = 0x00010000  # 65536 bytes
+        self.blockram_size        = 0x00002000  # 8192 bytes
         self.hyperram_base        = 0x20000000  # Winbond W956A8MBYA6I
         self.hyperram_size        = 0x08000000  # 8 * 1024 * 1024
         self.csr_base             = 0xf0000000
@@ -137,6 +142,7 @@ class Soc(Component):
         self.usb0_ep_out_irq      = 5
         self.test_base            = 0x00000900
         self.test_irq             = 6
+        self.ila_base             = 0x0000a000
 
         # cpu
         self.cpu = VexRiscv(
@@ -215,6 +221,10 @@ class Soc(Component):
         self.test = test.Peripheral()
         self.csr_decoder.add(self.test.bus, addr=self.test_base, name="test")
         self.interrupt_controller.add(self.test, name="test", number=self.test_irq)
+
+        # ila controller peripheral
+        self.ila = ila.Peripheral()
+        self.csr_decoder.add(self.ila.bus, addr=self.ila_base, name="ila")
 
         # wishbone csr bridge
         self.wb_to_csr = WishboneCSRBridge(self.csr_decoder.bus, data_width=32)
@@ -300,22 +310,31 @@ class Soc(Component):
             self.cpu.jtag_tck     .eq(jtag0_io.tck.i),
         ]
 
-        # Debug
+        # add ila controller peripheral
+        m.submodules += self.ila
+
+        # debug pmod
         pmod_io  = platform.request("user_pmod", 0)
         debug_io = platform.request("debug", 0)
 
-        clk_fast = Signal(4)
-        clk_sync = Signal(4)
-        clk_usb  = Signal(4)
-        m.d.fast += clk_fast.eq(clk_fast + 1)
-        m.d.sync += clk_sync.eq(clk_sync + 1)
-        m.d.usb  += clk_usb .eq(clk_usb + 1)
+        clk_fast = Signal(1)
+        clk_sync = Signal(1)
+        clk_usb  = Signal()
+        m.d.fast += clk_fast.eq(~clk_fast)
+        m.d.sync += clk_sync.eq(~clk_sync)
+        m.d.usb  += clk_usb .eq(~clk_usb)
 
         m.d.comb += [
-            pmod_io.oe    .eq(1),
-            pmod_io.o     .eq(self.hyperram.debug_wb),
-            debug_io.a.o  .eq(self.hyperram.debug_io[0]),
-            debug_io.b.o  .eq(self.hyperram.debug_io[1]),
+            pmod_io.oe     .eq(1),
+
+            pmod_io.o[0]   .eq(self.ila.trigger),
+            pmod_io.o[1]   .eq(clk_fast),
+            pmod_io.o[2]   .eq(clk_sync),
+            pmod_io.o[3]   .eq(clk_usb),
+            pmod_io.o[4:]  .eq(self.ila.a),
+
+            debug_io.a.o   .eq(self.hyperram.debug_io[0]),
+            debug_io.b.o   .eq(self.hyperram.debug_io[1]),
         ]
 
         return DomainRenamer({
@@ -329,6 +348,61 @@ class Soc(Component):
 class Top(Elaboratable):
     def __init__(self, clock_frequency, domain="sync"):
         self.soc = Soc(clock_frequency=clock_frequency, domain=domain)
+
+        self.usb_clk = Signal()
+        self.ila = USBIntegratedLogicAnalyzer(
+            bus          = "target_phy",
+            domain       = "sync",
+            signals      = [
+                self.usb_clk,
+                self.soc.ila.trigger,
+                self.soc.ila.a,
+
+                # wishbone bus
+                Signal(1, name="-wishbone--------"),
+                self.soc.hyperram.bus.adr,
+                self.soc.hyperram.bus.dat_w,
+                self.soc.hyperram.bus.dat_r,
+                self.soc.hyperram.bus.sel,
+                self.soc.hyperram.bus.cyc,
+                self.soc.hyperram.bus.stb,
+                self.soc.hyperram.bus.we,
+                self.soc.hyperram.bus.ack,
+                self.soc.hyperram.bus.cti,
+
+                # hyperram interface
+                Signal(1, name="-interface-------"),
+                self.soc.hyperram.psram.idle,
+                self.soc.hyperram.psram.read_data,
+                self.soc.hyperram.psram.write_data,
+                self.soc.hyperram.psram.write_mask,
+                self.soc.hyperram.psram.perform_write,
+                self.soc.hyperram.psram.start_transfer,
+                self.soc.hyperram.psram.final_word,
+                self.soc.hyperram.psram.read_ready,
+                self.soc.hyperram.psram.write_ready,
+                self.soc.hyperram.psram.fsm,
+                self.soc.hyperram.psram.current_address,
+
+                # hyper bus
+                Signal(1, name="-hyperbus-------"),
+                self.soc.hyperram.psram.phy.clk_en,
+                self.soc.hyperram.psram.phy.dq.e,
+                self.soc.hyperram.psram.phy.dq.o,
+                self.soc.hyperram.psram.phy.dq.i,
+                self.soc.hyperram.psram.phy.rwds.e,
+                self.soc.hyperram.psram.phy.rwds.o,
+                self.soc.hyperram.psram.phy.rwds.i,
+                self.soc.hyperram.psram.phy.cs,
+                self.soc.hyperram.psram.phy.reset,
+                self.soc.hyperram.psram.phy.read,
+                self.soc.hyperram.psram.phy.datavalid,
+                self.soc.hyperram.psram.phy.burstdet,
+            ],
+            sample_depth = 2048,
+            samples_pretrigger = 16,
+        )
+        self.soc.ila_bus = self.ila
 
     def elaborate(self, platform):
         # add additional resource
@@ -349,6 +423,13 @@ class Top(Elaboratable):
 
         # add soc to design
         m.submodules += self.soc
+
+        # add ila to design
+        m.submodules += self.ila
+        m.d.comb += self.ila.trigger.eq(self.soc.ila.trigger)
+        m.d.comb += [
+            self.usb_clk.eq(ClockSignal("usb")),
+        ]
 
         return m
 

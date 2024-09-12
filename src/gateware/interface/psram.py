@@ -488,7 +488,8 @@ class HyperRAMDQSInterface(Elaboratable):
         self.write_mask       = Signal(4)
 
         # Debug signals.
-        self.fsm = Signal(8)
+        self.current_address = Signal(32)
+        self.fsm = Signal(4)
 
 
     def elaborate(self, platform):
@@ -499,7 +500,8 @@ class HyperRAMDQSInterface(Elaboratable):
         #
         is_read         = Signal()
         is_register     = Signal()
-        current_address = Signal(32)
+        #current_address = Signal(32)
+        current_address = self.current_address
         is_multipage    = Signal()
 
         #
@@ -551,19 +553,9 @@ class HyperRAMDQSInterface(Elaboratable):
         ))
 
         with m.FSM() as fsm:
-            m.d.comb += [
-                self.fsm[0] .eq(fsm.ongoing("IDLE")),
-                self.fsm[1] .eq(fsm.ongoing("LATCH_RWDS")),
-                self.fsm[2] .eq(fsm.ongoing("SHIFT_COMMAND0")),
-                self.fsm[3] .eq(fsm.ongoing("SHIFT_COMMAND1")),
-                self.fsm[4] .eq(fsm.ongoing("HANDLE_LATENCY")),
-                self.fsm[5] .eq(fsm.ongoing("READ_DATA")),
-                self.fsm[6] .eq(fsm.ongoing("WRITE_DATA")),
-                self.fsm[7] .eq(fsm.ongoing("RECOVERY")),
-            ]
-
             # IDLE state: waits for a transaction request
-            with m.State('IDLE'):
+            with m.State('IDLE'):  #0
+                m.d.comb += self.fsm.eq(0) # debug
                 m.d.comb += self.idle        .eq(1)
                 m.d.sync += self.phy.clk_en  .eq(0)
 
@@ -586,14 +578,16 @@ class HyperRAMDQSInterface(Elaboratable):
 
             # LATCH_RWDS -- latch in the value of the RWDS signal,
             # which determines our read/write latency.
-            with m.State("LATCH_RWDS"):
+            with m.State("LATCH_RWDS"):  #1
+                m.d.comb += self.fsm.eq(1) # debug
                 m.d.sync += extra_latency.eq(self.phy.rwds.i),
                 m.d.sync += self.phy.clk_en.eq(0b11)
                 m.next="SHIFT_COMMAND0"
 
 
             # SHIFT_COMMANDx -- shift each of our command words out
-            with m.State('SHIFT_COMMAND0'):
+            with m.State('SHIFT_COMMAND0'):  #2
+                m.d.comb += self.fsm.eq(2) # debug
                 # Output the first 32 bits of our command.
                 m.d.sync += [
                     self.phy.dq.o.eq(Cat(ca[16:48])),
@@ -601,7 +595,8 @@ class HyperRAMDQSInterface(Elaboratable):
                 ]
                 m.next = 'SHIFT_COMMAND1'
 
-            with m.State('SHIFT_COMMAND1'):
+            with m.State('SHIFT_COMMAND1'):  #3
+                m.d.comb += self.fsm.eq(3) # debug
                 # Output the remaining 32 bits of our command.
                 m.d.sync += [
                     self.phy.dq.o.eq(Cat(Const(0, 16), ca[0:16])),
@@ -628,7 +623,8 @@ class HyperRAMDQSInterface(Elaboratable):
 
 
             # HANDLE_LATENCY -- applies clock cycles until our latency period is over.
-            with m.State('HANDLE_LATENCY'):
+            with m.State('HANDLE_LATENCY'):  #4
+                m.d.comb += self.fsm.eq(4) # debug
                 m.d.sync += latency_clocks_remaining.eq(latency_clocks_remaining - 1)
 
                 with m.If(latency_clocks_remaining == 0):
@@ -640,7 +636,8 @@ class HyperRAMDQSInterface(Elaboratable):
 
 
             # READ_DATA -- reads words from the PSRAM
-            with m.State('READ_DATA'):
+            with m.State('READ_DATA'):  #5
+                m.d.comb += self.fsm.eq(5) # debug
                 m.d.sync += self.phy.read.eq(0b11)
 
                 datavalid_delay = Signal()
@@ -658,7 +655,8 @@ class HyperRAMDQSInterface(Elaboratable):
                         m.next = 'RECOVERY'
 
             # WRITE_DATA -- write a word to the PSRAM
-            with m.State("WRITE_DATA"):
+            with m.State("WRITE_DATA"):  #6
+                m.d.comb += self.fsm.eq(6) # debug
                 m.d.sync += [
                     self.phy.dq.o    .eq(self.write_data),
                     self.phy.dq.e    .eq(1),
@@ -672,17 +670,17 @@ class HyperRAMDQSInterface(Elaboratable):
                     m.next = 'IDLE'
 
                 with m.Elif(self.final_word):
+                    m.d.sync += self.phy.clk_en .eq(0) #SEB - fixes first byte write error
                     m.next = 'RECOVERY'
 
 
             # RECOVERY state: wait for the required period of time before a new transaction
-            with m.State('RECOVERY'):
+            with m.State('RECOVERY'):  #7
+                m.d.comb += self.fsm.eq(7) # debug
                 m.d.sync += self.phy.clk_en .eq(0)
 
                 # TODO: implement recovery
                 m.next = 'IDLE'
-
-
 
         return m
 
