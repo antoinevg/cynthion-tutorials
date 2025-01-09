@@ -28,7 +28,8 @@ def sinusoid_lut(bit_depth, memory_size, twos_complement=False):
 
     # signal gain
     #gain = 0.794328 # -2dB
-    #ys = [y * gain for y in ys]
+    gain = 0.501187 # - 6dB
+    ys = [y * gain for y in ys]
 
     # convert to integer
     ys = [int(y) for y in ys]

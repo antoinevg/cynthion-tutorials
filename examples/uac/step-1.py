@@ -7,11 +7,11 @@
 
 import os
 
-from amaranth                            import Cat, Const, DomainRenamer, Elaboratable, Module, Signal
+from amaranth                             import Cat, Const, DomainRenamer, Elaboratable, Module, Signal
 
-from usb_protocol.emitters               import DeviceDescriptorCollection
-from usb_protocol.emitters.descriptors   import uac2, standard
-from usb_protocol.types                  import (
+from usb_protocol.emitters                import DeviceDescriptorCollection
+from usb_protocol.emitters.descriptors    import uac2, standard
+from usb_protocol.types                   import (
     USBDirection,
     USBRequestRecipient,
     USBRequestType,
@@ -20,23 +20,23 @@ from usb_protocol.types                  import (
     USBTransferType,
     USBUsageType,
 )
-from usb_protocol.types.descriptors.uac2 import AudioClassSpecificRequestCodes
+from usb_protocol.types.descriptors.uac2  import AudioClassSpecificRequestCodes
 
-from luna                                import top_level_cli
-from luna.usb2                           import USBDevice, USBIsochronousInEndpoint
-
-from luna.gateware.usb.stream            import USBInStreamInterface
-from luna.gateware.usb.usb2.endpoints.stream_isochronous import  (
-    USBIsochronousOutStreamEndpoint,
-    USBIsochronousInStreamEndpoint,
+from luna                                 import top_level_cli
+from luna.usb2                            import (
+    USBDevice,
+    USBIsochronousInEndpoint,
+    USBIsochronousStreamInEndpoint,
+    USBIsochronousStreamOutEndpoint,
 )
-from luna.gateware.usb.usb2.request      import USBRequestHandler, StallOnlyRequestHandler
-from luna.gateware.stream.generator      import StreamSerializer
+from luna.gateware.stream.generator       import StreamSerializer
+from luna.gateware.usb.stream             import USBInStreamInterface
+from luna.gateware.usb.usb2.request       import USBRequestHandler, StallOnlyRequestHandler
 
-from tutorials.gateware.util import NCO
+from tutorials.gateware.util              import NCO
 
 
-class RequestHandlers(USBRequestHandler):
+class RequestHandler(USBRequestHandler):
     """ TODO
     """
 
@@ -117,7 +117,7 @@ class RequestHandlers(USBRequestHandler):
                     with m.If(interface.status_requested):
                         m.d.comb += interface.handshakes_out.ack.eq(1)
 
-                with m.Case():
+                with m.Default():
                     #
                     # Stall unhandled requests.
                     #
@@ -128,7 +128,7 @@ class RequestHandlers(USBRequestHandler):
 
 
 class USBAudioClass2DeviceExample(Elaboratable):
-    """ Simple device the emulates a USB Audio Class 2 Audio Interface.
+    """ Simple device that acts as a USB Audio Class 2 Audio Interface.
 
     Sends a simple stereo sine wave to the host.
     """
@@ -136,6 +136,7 @@ class USBAudioClass2DeviceExample(Elaboratable):
     TRANSFERS_PER_MICROFRAME = 104
     SUBSLOT_SIZE = 4
     BIT_RESOLUTION = 24
+    NUM_CHANNELS = 2
 
     def __init__(self):
         pass
@@ -172,7 +173,6 @@ class USBAudioClass2DeviceExample(Elaboratable):
             i = uac2.StandardAudioControlInterfaceDescriptorEmitter()
             i.bInterfaceNumber = 0
             c.add_subordinate_descriptor(i)
-
 
             # - Interface #0 class-specific audio control interface descriptor --
 
@@ -324,9 +324,11 @@ class USBAudioClass2DeviceExample(Elaboratable):
         # Generate our domain clocks/resets.
         m.submodules.car = platform.clock_domain_generator()
 
+        # Get some debug LEDs...
+        leds: Signal(6) = Cat(platform.request("led", n).o for n in range(0, 6))
+
         # Create our USB device interface...
-        #ulpi = platform.request(platform.default_usb_connection) # target
-        ulpi = platform.request("aux_phy")
+        ulpi = platform.request("target_phy")
         m.submodules.usb = usb = USBDevice(bus=ulpi)
 
         # Add our standard control endpoint to the device.
@@ -338,7 +340,7 @@ class USBAudioClass2DeviceExample(Elaboratable):
         ])
 
         # Attach our class request handlers.
-        ep_control.add_request_handler(RequestHandlers())
+        ep_control.add_request_handler(RequestHandler())
 
         # Attach class-request handlers that stall any vendor or reserved requests,
         # as we don't have or need any.
@@ -347,7 +349,7 @@ class USBAudioClass2DeviceExample(Elaboratable):
             (setup.type == USBRequestType.RESERVED)
         ep_control.add_request_handler(StallOnlyRequestHandler(stall_condition))
 
-        ep1_out = USBIsochronousOutStreamEndpoint(
+        ep1_out = USBIsochronousStreamOutEndpoint(
             endpoint_number=1, # EP 0x01 OUT - audio from host
             max_packet_size=self.TRANSFERS_PER_MICROFRAME)
         usb.add_endpoint(ep1_out)
@@ -357,35 +359,77 @@ class USBAudioClass2DeviceExample(Elaboratable):
             max_packet_size=4)
         usb.add_endpoint(ep1_in)
 
-        ep2_in = USBIsochronousInStreamEndpoint(
-            endpoint_number=2, # EP 2 0x81 IN - audio to host
+        ep2_in = USBIsochronousStreamInEndpoint(
+            endpoint_number=2, # EP 2 0x82 IN - audio to host
             max_packet_size=self.TRANSFERS_PER_MICROFRAME)
         usb.add_endpoint(ep2_in)
 
         # Connect our device as a high speed device.
         m.d.comb += [
             ep1_in.bytes_in_frame.eq(4),  # feedback is 32 bits = 4 bytes
-            ep2_in.bytes_in_frame.eq(48), # 2x 24 bit samples = 48 bytes
+            ep2_in.bytes_in_frame.eq(self.BIT_RESOLUTION * self.NUM_CHANNELS), # 2x 24 bit samples = 48 bytes
             ep1_out.stream.ready .eq(1),
             usb.connect          .eq(1),
             usb.full_speed_only  .eq(0),
         ]
 
-        # ep1_in - feedback to host
+        # - ep1_in - feedback to host -----------------------------------------
+
         feedbackValue = Signal(32)
         bitPos        = Signal(5)
-        # 48000 / 2000 = 24 - aka what the actual fuckness are you trying to do here dude?
         m.d.comb += [
-            feedbackValue.eq(24 << 14),
+            feedbackValue.eq(self.BIT_RESOLUTION << 14),
             bitPos.eq(ep1_in.address << 3),
             ep1_in.value.eq(0xff & (feedbackValue >> bitPos))
         ]
+
+        # - ep1_out - audio from host -----------------------------------------
+
+        # calculate bytes in frame for audio in
+        # max_packet_size = self.TRANSFERS_PER_MICROFRAME
+        # audio_in_frame_bytes = Signal(range(max_packet_size), reset=self.BIT_RESOLUTION * self.NUM_CHANNELS)
+        # audio_in_frame_bytes_counting = Signal()
+
+        # with m.If(ep1_out.stream.valid & ep1_out.stream.ready):
+        #     with m.If(audio_in_frame_bytes_counting):
+        #         m.d.usb += audio_in_frame_bytes.eq(audio_in_frame_bytes + 1)
+
+        #     with m.If(ep1_out.stream.first):
+        #         m.d.usb += [
+        #             audio_in_frame_bytes.eq(1),
+        #             audio_in_frame_bytes_counting.eq(1),
+        #         ]
+        #     with m.Elif(ep1_out.stream.last):
+        #         m.d.usb += audio_in_frame_bytes_counting.eq(0)
+
+        # read stream coming from host and do something with it
+        m.d.comb += ep1_out.stream.ready .eq(1)
+
+        # debug
+        debug0 = platform.request("user_pmod", 0)
+        debug1 = platform.request("user_pmod", 1)
+        m.d.comb += [
+            debug0.oe.eq(1),
+            debug1.oe.eq(1),
+        ]
+        m.d.comb += debug0.o.eq(ep1_out.stream.payload)
+        #m.d.comb += debug1.o.eq(ep2_in.stream.payload)
+        #m.d.comb += debug1.o.eq(audio_in_frame_bytes)
+        m.d.comb += debug1.o[0].eq(ep1_out.stream.first)
+        m.d.comb += debug1.o[1].eq(ep1_out.stream.last)
+        m.d.comb += debug1.o[2].eq(ep2_in.data_requested)
+        m.d.comb += debug1.o[3].eq(ep2_in.frame_finished)
+        m.d.comb += leds.eq(ep1_out.stream.payload)
+
+        #m.d.comb += ep2_in.stream.payload.eq(ep1_out.stream.payload)
+
+
 
         # - ep2_in - audio to host --------------------------------------------
 
         # create our NCO
         fs = int(60e6) # usb frequency
-        nco = NCO(60000000, bit_depth=24, lut_length=512)
+        nco = NCO(fs, bit_depth=self.BIT_RESOLUTION, lut_length=512)
         m.submodules.nco = DomainRenamer({"sync": "usb"})(nco)
 
         # configure our NCO
